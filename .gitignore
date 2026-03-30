@@ -151,3 +151,5 @@ agent*.*
 samples/screenshot/*
 src/uipc
 !AGENTS.md
+dist/
+src/
