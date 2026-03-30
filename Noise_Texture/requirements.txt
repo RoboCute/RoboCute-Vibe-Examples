@@ -1,0 +1,18 @@
+# Noise Texture Generator Dependencies
+
+# Core dependencies
+numpy>=1.21.0
+Pillow>=9.0.0
+
+# Noise generation libraries
+noise>=1.2.1          # Perlin noise
+opensimplex>=0.4.5    # Simplex noise
+
+# Scientific computing (for Value and Worley noise)
+scipy>=1.7.0
+
+# Optional: Visualization
+matplotlib>=3.5.0     # For display_texture and create_texture_grid
+
+# Optional: Performance
+numba>=0.56.0         # For JIT compilation (optional)

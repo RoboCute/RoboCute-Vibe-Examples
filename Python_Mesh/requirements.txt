@@ -1,0 +1,5 @@
+pymeshlab>=2022.2
+open3d>=0.17.0
+trimesh>=3.20.0
+numpy>=1.24.0
+matplotlib>=3.7.0

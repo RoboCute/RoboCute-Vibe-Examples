@@ -1,0 +1,153 @@
+# xmake
+CMakeLists.txt.user
+CMakeCache.txt
+CMakeFiles
+CMakeScripts
+Makefile
+cmake_install.cmake
+install_manifest.txt
+CTestTestfile.cmake
+Testing
+/out
+
+# xmake
+/.xmake
+
+# idea
+/.idea
+
+# cursor
+/.cursor
+
+# macos
+.DS_Store
+stressTest
+
+# compile commands
+compile_commands.json
+.cache
+
+# python
+*.pyc
+*.msi
+
+# build dirs
+/.sb
+/.build
+/.pkgs
+
+# build dirs
+/build
+/build-vs
+/build-wasm
+/build-wasi
+/build_*
+/build-*
+/dist
+
+# visual studio
+/.vs
+
+# vscode plugins
+/.VSCodeCounter
+
+# xcode
+/xcode
+
+# shell files
+*.pyi
+*.cmd
+*.bat
+*.ps1
+*.sh
+
+# resource file
+*.7z
+*.zip
+*.patch 
+
+# engine
+
+# render
+/modules/render/runtime/shader/host
+/xmake/config.lua
+
+# SDKs
+# TODO. remove it
+/SDKs/x64
+/SDKs/grpc
+/SDKs/reflector-win
+/SDKs/tools
+/SDKs/libs
+/SDKs/python
+/SDKs/*.zip
+/SDKs/*.ttf
+/SDKs/manifest.json
+
+# TODO. remove it
+/thirdparty/*.zip
+scenes
+/vcpkg_installed
+/vsxmake
+/vsxmake*
+.history
+xmake.log
+-.json
+.vscode/launch.json
+.vscode/tasks.json
+thirdparty/cpptrace
+thirdparty/eigen
+thirdparty/libigl
+thirdparty/urdfdom
+thirdparty/libuipc
+thirdparty/libtorch
+thirdparty/LuisaCompute
+thirdparty/qt_node_editor
+thirdparty/acl
+thirdparty/ozz_animation
+thirdparty/jolt_physics
+thirdparty/cppitertools
+thirdparty/dylib
+thirdparty/console_bridge
+thirdparty/tinyxml2
+thirdparty/urdfdom_headers
+thirdparty/alembic
+thirdparty/argparse
+thirdparty/Imath
+thirdparty/lib3ds
+thirdparty/lwo
+thirdparty/tinyoff
+thirdparty/tinyply
+thirdparty/tinystl
+thirdparty/tracy
+
+xmake/options.json
+xmake/options.lua
+modules/tools/nanogen/builtin/builtin.cpp
+generated/
+generated_bk/
+__pycache__
+*.egg-info
+.env
+uv.lock
+
+
+src/robocute/rbc_ext/bin
+src/robocute/rbc_ext/release
+debug
+.pytest_cache
+.venv
+.vscode/*
+!.vscode/settings.json
+rbc/shader/host
+.mypy_cache
+.qtcreator
+
+site
+AGENTS.md
+agent*.*
+*agent.*
+*.bytes
+samples/screenshot/*
+src/uipc
+!AGENTS.md
