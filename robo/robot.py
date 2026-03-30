@@ -20,13 +20,13 @@ try:
 except ImportError:
     RBC_AVAILABLE = False
 
-from .chassis import (
+from chassis import (
     ChassisType, ChassisBase, DifferentialChassis,
     AckermannChassis, TrackedChassis, MecanumChassis,
     Pose2D, Velocity
 )
-from .path_planner import PathPlanner, Path, PathPoint, AStarPlanner
-from .map_editor import MapEditor
+from path_planner import PathPlanner, Path, PathPoint, AStarPlanner
+from map_editor import MapEditor
 
 
 @dataclass
@@ -490,3 +490,48 @@ class RobotFleet:
             robot.destroy()
         self._robots.clear()
         self._tasks.clear()
+
+
+if __name__ == "__main__":
+    """简单的机器人演示"""
+    print("=" * 50)
+    print("机器人模块演示")
+    print("=" * 50)
+    
+    # 创建差速机器人
+    config = RobotConfig(
+        name="demo_robot",
+        chassis_type=ChassisType.DIFFERENTIAL,
+        wheel_radius=0.05,
+        wheel_base=0.3,
+        max_linear_speed=1.0,
+        max_angular_speed=1.0
+    )
+    
+    robot = Robot(config)
+    print(f"\n创建机器人: {robot.config.name}")
+    print(f"底盘类型: {robot.config.chassis_type.name}")
+    
+    # 设置初始位姿
+    robot.set_pose(0.0, 0.0, 0.0)
+    print(f"初始位姿: ({robot.pose.x}, {robot.pose.y}, {robot.pose.theta:.2f})")
+    
+    # 设置速度并更新
+    print("\n设置速度: vx=0.5 m/s, omega=0.3 rad/s")
+    robot.set_velocity(0.5, 0.0, 0.3)
+    
+    # 模拟运动
+    dt = 0.1
+    print("\n模拟运动:")
+    for i in range(20):
+        robot.chassis.update_odometry(dt)
+        pose = robot.pose
+        print(f"  t={i*dt:.1f}s: x={pose.x:.3f}, y={pose.y:.3f}, theta={pose.theta:.3f}")
+    
+    # 停止
+    robot.stop()
+    print(f"\n停止后速度: ({robot.velocity.vx}, {robot.velocity.omega})")
+    
+    print("\n" + "=" * 50)
+    print("演示完成!")
+    print("=" * 50)
