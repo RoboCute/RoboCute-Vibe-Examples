@@ -53,9 +53,9 @@ class TestUtilityFunctions(unittest.TestCase):
         self.assertTrue(os.path.exists(filepath))
         
         # Verify image can be loaded
-        img = Image.open(filepath)
-        self.assertEqual(img.size, (64, 64))
-        self.assertEqual(img.mode, 'L')
+        with Image.open(filepath) as img:
+            self.assertEqual(img.size, (64, 64))
+            self.assertEqual(img.mode, 'L')
     
     def test_save_texture_with_colormap(self):
         """Test saving texture with colormap."""
@@ -63,9 +63,9 @@ class TestUtilityFunctions(unittest.TestCase):
         save_texture(self.test_texture, filepath, colormap="heatmap")
         self.assertTrue(os.path.exists(filepath))
         
-        img = Image.open(filepath)
-        self.assertEqual(img.size, (64, 64))
-        self.assertEqual(img.mode, 'RGB')
+        with Image.open(filepath) as img:
+            self.assertEqual(img.size, (64, 64))
+            self.assertEqual(img.mode, 'RGB')
     
     def test_save_texture_creates_directory(self):
         """Test that save_texture creates output directory."""

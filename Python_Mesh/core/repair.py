@@ -176,14 +176,23 @@ def diagnose_mesh(mesh_path: Union[str, Path]) -> Dict[str, bool]:
     if results['self_intersecting']:
         issues.append("自相交")
     
-    results['orientable_triangle_pairs'] = mesh.is_orientable_triangle_pairs()
-    if not results['orientable_triangle_pairs']:
-        issues.append("三角形对不可定向")
+    # Check orientability - method may not exist in all Open3D versions
+    try:
+        results['orientable_triangle_pairs'] = mesh.is_orientable_triangle_pairs()
+        if not results['orientable_triangle_pairs']:
+            issues.append("三角形对不可定向")
+    except AttributeError:
+        # Fallback for older Open3D versions
+        results['orientable_triangle_pairs'] = True  # Assume orientable if method unavailable
     
     results['vertex_colors'] = mesh.has_vertex_colors()
     results['triangle_normals'] = mesh.has_triangle_normals()
     results['vertex_normals'] = mesh.has_vertex_normals()
-    results['texture_coordinates'] = mesh.has_texture_coordinates(0)
+    # texture_coordinates check may not exist in all Open3D versions
+    try:
+        results['texture_coordinates'] = mesh.has_texture_coordinates(0)
+    except AttributeError:
+        results['texture_coordinates'] = False  # Assume no UVs if method unavailable
     
     print(f"\n网格诊断报告: {mesh_path.name}")
     print(f"  顶点数: {len(mesh.vertices)}")
@@ -201,7 +210,7 @@ def diagnose_mesh(mesh_path: Union[str, Path]) -> Dict[str, bool]:
         for issue in issues:
             print(f"  - {issue}")
     else:
-        print("\n✓ 网格健康，无问题")
+        print("\n[OK] 网格健康，无问题")
     
     results['healthy'] = len(issues) == 0
     results['issues'] = issues

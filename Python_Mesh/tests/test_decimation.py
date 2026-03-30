@@ -21,8 +21,14 @@ try:
 except ImportError:
     HAS_DEPS = False
 
+try:
+    import open3d as o3d
+    HAS_OPEN3D = True
+except ImportError:
+    HAS_OPEN3D = False
 
-@pytest.mark.skipif(not HAS_DEPS, reason="Dependencies not available")
+
+@pytest.mark.skipif(not HAS_OPEN3D, reason="Open3D not available")
 def test_open3d_decimation():
     """Test Open3D decimation"""
     import open3d as o3d
@@ -37,14 +43,14 @@ def test_open3d_decimation():
         
         # Decimate
         output_path = Path(tmpdir) / 'output.ply'
-        result = decimate_mesh_open3d(output_path, output_path, target_faces=100)
+        result = decimate_mesh_open3d(input_path, output_path, target_faces=100)
         
         # Check result has fewer faces
         assert len(result.triangles) < original_faces
         assert len(result.triangles) <= 100
 
 
-@pytest.mark.skipif(not HAS_DEPS, reason="Dependencies not available")
+@pytest.mark.skipif(not HAS_OPEN3D, reason="Open3D not available")
 def test_percentage_decimation():
     """Test percentage-based decimation"""
     import open3d as o3d

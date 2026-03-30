@@ -81,19 +81,30 @@ class LODGenerator:
         print(f"Output: {self.output_dir}")
         print(f"{'='*60}\n")
         
-        # Step 1: 初始清理
+        # Step 1: 初始清理 (使用 Open3D 更稳定的 API)
         cleaned_path = self.output_dir / 'cleaned_highpoly.ply'
         
-        if cleanup_first:
+        if cleanup_first and OPEN3D_AVAILABLE:
             print("[Step 1] Initial Cleanup...")
+            mesh = o3d.io.read_triangle_mesh(str(input_path))
+            
+            # 使用 Open3D 进行清理
+            mesh.remove_duplicated_vertices()
+            mesh.remove_unreferenced_vertices()
+            mesh.remove_degenerate_triangles()
+            mesh.compute_vertex_normals()
+            
+            o3d.io.write_triangle_mesh(str(cleaned_path), mesh)
+            print(f"  Cleaned: {len(mesh.vertices)} vertices, {len(mesh.triangles)} faces\n")
+        elif cleanup_first:
+            # Fallback to PyMeshLab with available filters
+            print("[Step 1] Initial Cleanup (PyMeshLab)...")
             ms = pymeshlab.MeshSet()
             ms.load_new_mesh(str(input_path))
-            
-            ms.apply_filter('remove_duplicate_vertices')
-            ms.apply_filter('remove_unreferenced_vertices')
-            ms.apply_filter('close_holes', maxholesize=50)
-            ms.apply_filter('re_orient_all_faces_coherentely')
-            
+            # Only apply filters that are known to exist
+            ms.apply_filter('simplification_quadric_edge_collapse_decimation', 
+                           targetfacenum=ms.current_mesh().face_number(),
+                           preservenormal=True)
             ms.save_current_mesh(str(cleaned_path))
             mesh = ms.current_mesh()
             print(f"  Cleaned: {mesh.vertex_number()} vertices, {mesh.face_number()} faces\n")
@@ -119,48 +130,47 @@ class LODGenerator:
         return self.results
     
     def _process_lod(self, input_path: Path, config: LODConfig):
-        """处理单个 LOD"""
-        ms = pymeshlab.MeshSet()
-        ms.load_new_mesh(str(input_path))
-        
-        # 减面
-        ms.apply_filter(
-            'simplification_quadric_edge_collapse_decimation',
-            targetfacenum=config.target_faces,
-            preservenormal=True,
-            preservetopology=True,
-            optimalplacement=True
-        )
-        
-        mesh = ms.current_mesh()
-        
-        # 如果需要细分（通常用于高模）
-        if config.subdiv_iterations > 0 and OPEN3D_AVAILABLE:
-            temp_path = self.output_dir / f'temp_{config.name}.ply'
-            ms.save_current_mesh(str(temp_path))
-            
-            o3d_mesh = o3d.io.read_triangle_mesh(str(temp_path))
-            
-            if o3d_mesh.is_edge_manifold():
-                o3d_mesh = o3d_mesh.subdivide_loop(number_of_iterations=config.subdiv_iterations)
-                o3d_mesh.compute_vertex_normals()
-                
-                output_path = self.output_dir / f'{config.name}.ply'
-                o3d.io.write_triangle_mesh(str(output_path), o3d_mesh)
-                print(f"  ✓ {config.name}: {len(o3d_mesh.triangles)} faces (with {config.subdiv_iterations}x subdivision)")
-                
-                # 清理临时文件
-                temp_path.unlink(missing_ok=True)
-                return o3d_mesh
-            else:
-                print(f"  ⚠ Skipping subdivision (non-manifold)")
-        
-        # 保存结果
+        """处理单个 LOD - 返回 Open3D 网格以确保对象有效性"""
         output_path = self.output_dir / f'{config.name}.ply'
-        ms.save_current_mesh(str(output_path))
-        print(f"  ✓ {config.name}: {mesh.face_number()} faces")
         
-        return mesh
+        # 使用 Open3D 进行减面（更稳定的 API）
+        if OPEN3D_AVAILABLE:
+            o3d_mesh = o3d.io.read_triangle_mesh(str(input_path))
+            current_faces = len(o3d_mesh.triangles)
+            
+            # 减面
+            if current_faces > config.target_faces:
+                o3d_mesh = o3d_mesh.simplify_quadric_decimation(
+                    target_number_of_triangles=config.target_faces
+                )
+            
+            # 如果需要细分（通常用于高模）
+            if config.subdiv_iterations > 0:
+                if o3d_mesh.is_edge_manifold():
+                    o3d_mesh = o3d_mesh.subdivide_loop(number_of_iterations=config.subdiv_iterations)
+                    o3d_mesh.compute_vertex_normals()
+                    print(f"  [OK] {config.name}: {len(o3d_mesh.triangles)} faces (with {config.subdiv_iterations}x subdivision)")
+                else:
+                    print(f"  [WARN] Skipping subdivision (non-manifold)")
+            
+            o3d.io.write_triangle_mesh(str(output_path), o3d_mesh)
+            print(f"  [OK] {config.name}: {len(o3d_mesh.triangles)} faces")
+            return o3d_mesh
+        else:
+            # Fallback to PyMeshLab
+            ms = pymeshlab.MeshSet()
+            ms.load_new_mesh(str(input_path))
+            ms.apply_filter(
+                'meshing_decimation_quadric_edge_collapse',
+                targetfacenum=config.target_faces,
+                preservenormal=True,
+                preservetopology=True
+            )
+            ms.save_current_mesh(str(output_path))
+            mesh = ms.current_mesh()
+            print(f"  [OK] {config.name}: {mesh.face_number()} faces")
+            # 重新加载为 Open3D 网格返回以确保对象有效性
+            return o3d.io.read_triangle_mesh(str(output_path))
     
     def get_stats(self) -> Dict[str, Dict[str, int]]:
         """

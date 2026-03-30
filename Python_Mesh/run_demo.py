@@ -54,17 +54,17 @@ def print_deps_status(deps):
     print("Dependencies Status:")
     print("-" * 40)
     for name, available in deps.items():
-        status = "✓ Available" if available else "✗ Not installed"
+        status = "[OK] Available" if available else "[MISSING] Not installed"
         print(f"  {name:<15} {status}")
     print()
     
     if not any(deps.values()):
-        print("ERROR: No dependencies installed!")
+        print("[ERROR] No dependencies installed!")
         print("Please run: pip install open3d pymeshlab numpy")
         return False
     
     if not deps['open3d']:
-        print("WARNING: Open3D is required for most demos.")
+        print("[WARNING] Open3D is required for most demos.")
         print("Install with: pip install open3d")
         return False
     
@@ -94,7 +94,7 @@ def demo_create_meshes():
         o3d.io.write_triangle_mesh(str(path), mesh)
         print(f"  Saved: {path.name} ({len(mesh.vertices)} vertices, {len(mesh.triangles)} faces)")
     
-    print("\n✓ Test meshes created!")
+    print("\n[SUCCESS] Test meshes created!")
     return output_dir
 
 
@@ -126,7 +126,7 @@ def demo_decimation(output_dir):
         reduction = 1 - (actual / len(mesh.triangles))
         print(f"{target:<12} {actual:<12} {reduction:<12.1%}")
     
-    print("\n✓ Decimation demo complete!")
+    print("\n[SUCCESS] Decimation demo complete!")
 
 
 def demo_subdivision(output_dir):
@@ -155,7 +155,7 @@ def demo_subdivision(output_dir):
         result = loop_subdivide(input_path, output_path, iterations=i)
         print(f"  {i} iteration(s): {len(result.triangles)} faces (x{4**i})")
     
-    print("\n✓ Subdivision demo complete!")
+    print("\n[SUCCESS] Subdivision demo complete!")
 
 
 def demo_repair(output_dir):
@@ -171,7 +171,7 @@ def demo_repair(output_dir):
     sphere_path = output_dir / 'sphere_original.ply'
     diagnose_mesh(sphere_path)
     
-    print("\n✓ Diagnosis demo complete!")
+    print("\n[SUCCESS] Diagnosis demo complete!")
 
 
 def demo_lod(output_dir):
@@ -208,7 +208,7 @@ def demo_lod(output_dir):
     print("\nLOD Report:")
     generator.print_report()
     
-    print("\n✓ LOD demo complete!")
+    print("\n[SUCCESS] LOD demo complete!")
 
 
 def demo_summary(output_dir):
@@ -250,11 +250,11 @@ def main():
             demo_lod(output_dir)
             demo_summary(output_dir)
         
-        print("\n✓ Demo completed! Check the output directory for results.")
+        print("\n[SUCCESS] Demo completed! Check the output directory for results.")
         return 0
         
     except Exception as e:
-        print(f"\n✗ Error during demo: {e}")
+        print(f"\n[ERROR] Error during demo: {e}")
         import traceback
         traceback.print_exc()
         return 1

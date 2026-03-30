@@ -153,3 +153,4 @@ src/uipc
 !AGENTS.md
 dist/
 src/
+output/

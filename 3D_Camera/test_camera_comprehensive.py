@@ -22,6 +22,39 @@ sys.path.insert(0, str(Path(__file__).parent))
 # Import core components from camera_math (no robocute dependencies)
 from camera_math import Vector3, lerp, lerp_vector, smooth_damp, FollowMode
 
+# Mock robocute modules BEFORE importing camera_controller
+# This must be done at module level to prevent numpy reimport issues
+_rbc_mock = Mock()
+_re_mock = Mock()
+_lc_mock = Mock()
+
+def _mock_double3(x, y, z):
+    m = Mock()
+    m.x = x
+    m.y = y
+    m.z = z
+    return m
+
+_lc_mock.double3 = _mock_double3
+
+def _mock_float4(x, y, z, w):
+    m = Mock()
+    m.x = x
+    m.y = y
+    m.z = z
+    m.w = w
+    return m
+
+_lc_mock.float4 = _mock_float4
+
+# Inject mocks into sys.modules before importing camera_controller
+sys.modules['robocute'] = _rbc_mock
+sys.modules['robocute.rbc_ext'] = _re_mock
+sys.modules['robocute.rbc_ext.luisa'] = _lc_mock
+
+# Now import camera_controller - this will use the mocked modules
+from camera_controller import CameraController, CameraManager
+
 
 class TestVector3Basics(unittest.TestCase):
     """Basic Vector3 operations"""
@@ -416,55 +449,11 @@ class TestCameraControllerMocked(unittest.TestCase):
         self.mock_transform.position.return_value = Mock(x=0, y=0, z=0)
         self.mock_app.get_display_transform.return_value = self.mock_transform
         
-        # Mock the robocute modules
-        self.rbc_mock = Mock()
-        self.re_mock = Mock()
-        self.lc_mock = Mock()
-        
-        # Setup mock double3
-        def mock_double3(x, y, z):
-            m = Mock()
-            m.x = x
-            m.y = y
-            m.z = z
-            return m
-        self.lc_mock.double3 = mock_double3
-        
-        # Setup mock float4 for quaternion
-        def mock_float4(x, y, z, w):
-            m = Mock()
-            m.x = x
-            m.y = y
-            m.z = z
-            m.w = w
-            return m
-        self.lc_mock.float4 = mock_float4
-        
-        # Setup capsule_vector
-        self.mock_capsule = Mock()
-        self.mock_capsule.emplace_back = Mock()
-        self.lc_mock.capsule_vector.return_value = self.mock_capsule
-        
-        # Patch the imports
-        self.patches = [
-            patch.dict('sys.modules', {'robocute': self.rbc_mock}),
-            patch.dict('sys.modules', {'robocute.rbc_ext': self.re_mock}),
-            patch.dict('sys.modules', {'robocute.rbc_ext.luisa': self.lc_mock}),
-        ]
-        for p in self.patches:
-            p.start()
-        
-        # Now import camera_controller
-        from camera_controller import CameraController, CameraManager, FollowMode, Vector3
+        # Use module-level imported classes (already imported with mocked dependencies)
         self.CameraController = CameraController
         self.CameraManager = CameraManager
         self.FollowMode = FollowMode
         self.Vector3 = Vector3
-    
-    def tearDown(self):
-        """Clean up patches"""
-        for p in self.patches:
-            p.stop()
     
     def test_camera_controller_initialization(self):
         """Test camera controller initializes correctly"""
@@ -654,38 +643,10 @@ class TestCameraManager(unittest.TestCase):
         self.mock_transform.position.return_value = Mock(x=0, y=0, z=0)
         self.mock_app.get_display_transform.return_value = self.mock_transform
         
-        self.rbc_mock = Mock()
-        self.re_mock = Mock()
-        self.lc_mock = Mock()
-        
-        def mock_double3(x, y, z):
-            m = Mock()
-            m.x = x
-            m.y = y
-            m.z = z
-            return m
-        self.lc_mock.double3 = mock_double3
-        
-        self.mock_capsule = Mock()
-        self.mock_capsule.emplace_back = Mock()
-        self.lc_mock.capsule_vector.return_value = self.mock_capsule
-        
-        self.patches = [
-            patch.dict('sys.modules', {'robocute': self.rbc_mock}),
-            patch.dict('sys.modules', {'robocute.rbc_ext': self.re_mock}),
-            patch.dict('sys.modules', {'robocute.rbc_ext.luisa': self.lc_mock}),
-        ]
-        for p in self.patches:
-            p.start()
-        
-        from camera_controller import CameraManager, CameraController, FollowMode
+        # Use module-level imported classes (already imported with mocked dependencies)
         self.CameraManager = CameraManager
         self.CameraController = CameraController
         self.FollowMode = FollowMode
-    
-    def tearDown(self):
-        for p in self.patches:
-            p.stop()
     
     def test_manager_create_camera(self):
         """Test creating cameras"""

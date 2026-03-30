@@ -46,10 +46,10 @@ def cmd_decimate(args):
                 args.output,
                 target_faces=args.target_faces
             )
-        print(f"✓ Success! Output saved to: {args.output}")
+        print(f"[OK] Success! Output saved to: {args.output}")
         return 0
     except Exception as e:
-        print(f"✗ Error: {e}")
+        print(f"[ERROR] {e}")
         return 1
 
 
@@ -63,10 +63,10 @@ def cmd_subdivide(args):
             result = loop_subdivide(args.input, args.output, iterations=args.iterations)
         else:
             result = midpoint_subdivide(args.input, args.output, iterations=args.iterations)
-        print(f"✓ Success! Output saved to: {args.output}")
+        print(f"[OK] Success! Output saved to: {args.output}")
         return 0
     except Exception as e:
-        print(f"✗ Error: {e}")
+        print(f"[ERROR] {e}")
         return 1
 
 
@@ -83,10 +83,10 @@ def cmd_repair(args):
             close_holes=not args.no_close_holes,
             max_hole_size=args.max_hole_size
         )
-        print(f"✓ Success! Output saved to: {args.output}")
+        print(f"[OK] Success! Output saved to: {args.output}")
         return 0
     except Exception as e:
-        print(f"✗ Error: {e}")
+        print(f"[ERROR] {e}")
         return 1
 
 
@@ -98,7 +98,7 @@ def cmd_diagnose(args):
         result = diagnose_mesh(args.input)
         return 0 if result['healthy'] else 1
     except Exception as e:
-        print(f"✗ Error: {e}")
+        print(f"[ERROR] {e}")
         return 1
 
 
@@ -128,10 +128,10 @@ def cmd_lod(args):
         results = generator.generate(args.input, configs)
         generator.print_report()
         
-        print(f"\n✓ Success! Generated {len(results)} LOD levels")
+        print(f"\n[OK] Success! Generated {len(results)} LOD levels")
         return 0
     except Exception as e:
-        print(f"✗ Error: {e}")
+        print(f"[ERROR] {e}")
         return 1
 
 

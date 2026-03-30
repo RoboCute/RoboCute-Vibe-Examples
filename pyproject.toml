@@ -6,12 +6,19 @@ dependencies = [
   "pydantic>=2.0.0",
   "numpy>=2.3.5",
   "pillow>=12.1.1",
+  "noise>=1.2.2",
+  "opensimplex>=0.4.5",
+  "scipy>=1.15.0",
+  "matplotlib>=3.10.0",
+  "pymeshlab>=2022.2",
+  "open3d>=0.17.0",
+  "trimesh>=3.20.0",
 ]
 description = "Make Robotics Cute!"
 license = {file = "Licenses/Apache-2.0.txt"}
 name = "robocute"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12,<3.14"
 version = "0.2.3"
 
 [tool.uv.workspace]

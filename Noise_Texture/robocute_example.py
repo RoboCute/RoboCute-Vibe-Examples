@@ -61,7 +61,8 @@ def generate_terrain_textures(output_dir: str = "output/terrain"):
     print("  Saved: terrain_albedo.png")
     
     # Roughness map (higher = rougher)
-    roughness = simplex.generate(scale=100.0, octaves=3, seed=44)
+    simplex_rough = SimplexNoiseGenerator(width=1024, height=1024, seed=44)
+    roughness = simplex_rough.generate(scale=100.0, octaves=3)
     save_texture(roughness, f"{output_dir}/terrain_roughness.png")
     print("  Saved: terrain_roughness.png")
     

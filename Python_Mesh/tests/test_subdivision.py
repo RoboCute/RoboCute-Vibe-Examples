@@ -20,6 +20,12 @@ try:
 except ImportError:
     HAS_DEPS = False
 
+try:
+    import open3d as o3d
+    HAS_OPEN3D = True
+except ImportError:
+    HAS_OPEN3D = False
+
 
 def test_catmull_clark_basic():
     """Test basic Catmull-Clark subdivision"""
@@ -58,7 +64,7 @@ def test_catmull_clark_cube():
     assert len(new_faces) == expected_faces
 
 
-@pytest.mark.skipif(not HAS_DEPS, reason="Dependencies not available")
+@pytest.mark.skipif(not HAS_OPEN3D, reason="Open3D not available")
 def test_check_manifold():
     """Test manifold checking"""
     import open3d as o3d
