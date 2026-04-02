@@ -281,9 +281,13 @@ class MeshBuilder:
 
             # Calculate tangent
             f_outer_dot = delta_uv1[0] * delta_uv2[1] - delta_uv2[0] * delta_uv1[1]
-            f_outer_dot = np.sign(f_outer_dot) * max(abs(f_outer_dot), 1e-5)
-            f = 1.0 / f_outer_dot
-            tangent = f * (delta_uv2[1] * edge1 - delta_uv1[1] * edge2)
+            # Avoid division by zero for degenerate UVs
+            if abs(f_outer_dot) < 1e-5:
+                # Use a default tangent based on edge1 for degenerate cases
+                tangent = edge1.copy()
+            else:
+                f = 1.0 / f_outer_dot
+                tangent = f * (delta_uv2[1] * edge1 - delta_uv1[1] * edge2)
 
             # Normalize
             tangent_len = np.linalg.norm(tangent)

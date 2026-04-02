@@ -51,6 +51,9 @@ from city_generator import (
     StreetNetwork,
     generate_complete_city,
 )
+# Add project root for mesh_builder import
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from mesh_builder import MeshBuilder
 
 
 class TestScatterPoint(unittest.TestCase):
@@ -681,8 +684,712 @@ class TestGenerateCompleteCity(unittest.TestCase):
         self.assertGreater(city["statistics"]["num_buildings"], 0)
 
 
+class TestMeshBuilderIntegration(unittest.TestCase):
+    """Test MeshBuilder integration with other Houdini modules."""
+    
+    def test_mesh_builder_with_cylinder_creation(self):
+        """Test MeshBuilder with cylinder mesh creation."""
+        # Create cylinder mesh data from houdini_nodes
+        mesh = create_cylinder_mesh(radius=1.0, height=2.0, segments=8)
+        
+        # Build mesh using MeshBuilder
+        builder = MeshBuilder()
+        builder.add_submesh()
+        builder.add_uv_set()
+        
+        # Add vertices from cylinder
+        for vertex in mesh["vertices"]:
+            builder.add_vertex(vertex)
+        
+        # Add triangles (indices are tuples in the mesh data)
+        for tri in mesh["indices"]:
+            builder.add_triangle(0, tri[0], tri[1], tri[2])
+        
+        # Validate
+        error = builder.check()
+        self.assertEqual(error, "")
+        self.assertEqual(builder.vertex_count(), len(mesh["vertices"]))
+    
+    def test_mesh_builder_with_extruded_building(self):
+        """Test MeshBuilder with extruded building footprint."""
+        # Create building extrusion
+        footprint = [(0, 0), (10, 0), (10, 10), (0, 10)]
+        building = extrude_building(footprint, height=20.0, floors=5)
+        
+        # Create mesh from building walls
+        builder = MeshBuilder()
+        builder.add_submesh()
+        
+        # Add vertices from wall data (each wall has 4 vertices)
+        vertex_map = {}  # Track unique vertices
+        for wall in building["walls"]:
+            for v in wall["vertices"]:
+                # v is (x, y, z) tuple
+                key = (round(v[0], 6), round(v[1], 6), round(v[2], 6))
+                if key not in vertex_map:
+                    vertex_map[key] = builder.add_vertex(v)
+        
+        # Add vertices from roof
+        for v in building["roof"]["vertices"]:
+            key = (round(v[0], 6), round(v[1], 6), round(v[2], 6))
+            if key not in vertex_map:
+                vertex_map[key] = builder.add_vertex(v)
+        
+        # Create a simple triangle fan from the roof vertices
+        roof_vertices = building["roof"]["vertices"]
+        if len(roof_vertices) >= 3:
+            # Get indices for roof vertices
+            indices = []
+            for v in roof_vertices:
+                key = (round(v[0], 6), round(v[1], 6), round(v[2], 6))
+                indices.append(vertex_map[key])
+            
+            # Create triangle fan
+            for i in range(1, len(indices) - 1):
+                builder.add_triangle(0, indices[0], indices[i], indices[i + 1])
+        
+        # Validate
+        if builder.vertex_count() > 0:
+            error = builder.check()
+            self.assertEqual(error, "")
+    
+    def test_mesh_builder_with_terrain(self):
+        """Test MeshBuilder with terrain mesh conversion."""
+        # Create terrain
+        terrain = HeightFieldTerrain(width=16, height=16, cell_size=1.0, seed=42)
+        terrain.generate_fractal_terrain()
+        
+        # Get mesh data from terrain
+        vertices, indices = terrain.to_mesh_data()
+        
+        # Build mesh using MeshBuilder
+        builder = MeshBuilder()
+        builder.add_submesh()
+        
+        # Add vertices
+        for vertex in vertices:
+            builder.add_vertex(vertex)
+        
+        # Add triangles
+        for i in range(0, len(indices), 3):
+            builder.add_triangle(0, indices[i], indices[i+1], indices[i+2])
+        
+        # Validate
+        error = builder.check()
+        self.assertEqual(error, "")
+        self.assertEqual(builder.vertex_count(), vertices.shape[0])
+    
+    def test_mesh_builder_with_scatter_points(self):
+        """Test MeshBuilder with scattered points as instanced markers."""
+        # Scatter points on surface
+        points = scatter_on_surface(bounds=(-10, 10), count=10, seed=42)
+        
+        # Create a simple marker mesh (triangle) for each point
+        builder = MeshBuilder()
+        
+        # Create submesh for markers
+        marker_submesh = builder.add_submesh()
+        
+        for point in points:
+            pos = point.position
+            scale = point.scale
+            
+            # Create a small triangle marker at each point position
+            v0 = builder.add_vertex((pos[0] - scale, pos[1], pos[2] - scale))
+            v1 = builder.add_vertex((pos[0] + scale, pos[1], pos[2] - scale))
+            v2 = builder.add_vertex((pos[0], pos[1] + scale, pos[2]))
+            
+            builder.add_triangle(marker_submesh, v0, v1, v2)
+        
+        # Validate
+        error = builder.check()
+        self.assertEqual(error, "")
+        self.assertEqual(builder.vertex_count(), len(points) * 3)
+    
+    def test_mesh_builder_with_tree_structure(self):
+        """Test MeshBuilder with L-system tree structure."""
+        # Generate tree structure
+        tree = generate_tree_structure(tree_type="oak", height=10.0, seed=42)
+        
+        builder = MeshBuilder()
+        trunk_submesh = builder.add_submesh()
+        branch_submesh = builder.add_submesh()
+        
+        # Add trunk vertices and triangles
+        # trunk is a dict with "height" and "radius"
+        trunk_height = tree["trunk"]["height"]
+        trunk_radius = tree["trunk"]["radius"]
+        
+        # Create a simple pyramid trunk
+        v0 = builder.add_vertex((-trunk_radius, 0, -trunk_radius))
+        v1 = builder.add_vertex((trunk_radius, 0, -trunk_radius))
+        v2 = builder.add_vertex((trunk_radius, 0, trunk_radius))
+        v3 = builder.add_vertex((-trunk_radius, 0, trunk_radius))
+        v_top = builder.add_vertex((0, trunk_height, 0))
+        
+        # Create triangles for pyramid trunk
+        builder.add_triangle(trunk_submesh, v0, v1, v_top)
+        builder.add_triangle(trunk_submesh, v1, v2, v_top)
+        builder.add_triangle(trunk_submesh, v2, v3, v_top)
+        builder.add_triangle(trunk_submesh, v3, v0, v_top)
+        
+        # Add foliage spheres as simple tetrahedrons to branch submesh
+        for foliage in tree.get("foliage", [])[:3]:  # Limit to first 3
+            pos = foliage["position"]
+            radius = foliage["radius"]
+            
+            # Simple tetrahedron for foliage cluster
+            f0 = builder.add_vertex((pos[0], pos[1] + radius, pos[2]))
+            f1 = builder.add_vertex((pos[0] + radius, pos[1] - radius, pos[2] + radius))
+            f2 = builder.add_vertex((pos[0] - radius, pos[1] - radius, pos[2] + radius))
+            f3 = builder.add_vertex((pos[0], pos[1] - radius, pos[2] - radius))
+            
+            builder.add_triangle(branch_submesh, f0, f1, f2)
+            builder.add_triangle(branch_submesh, f0, f2, f3)
+            builder.add_triangle(branch_submesh, f0, f3, f1)
+            builder.add_triangle(branch_submesh, f1, f2, f3)
+        
+        # Validate
+        if builder.vertex_count() > 0:
+            error = builder.check()
+            self.assertEqual(error, "")
+            self.assertEqual(builder.submesh_count(), 2)
+    
+    def test_mesh_builder_with_city_blocks(self):
+        """Test MeshBuilder with city block visualization."""
+        # Generate city layout
+        city_gen = CityGenerator(block_size=50, street_width=10, seed=42)
+        blocks, _ = city_gen.generate_grid(2, 2)
+        
+        builder = MeshBuilder()
+        block_submesh = builder.add_submesh()
+        
+        for block in blocks:
+            cx, cz = block.center
+            size = block.size
+            
+            # Create a quad for each city block
+            half_size = size / 2
+            v0 = builder.add_vertex((cx - half_size, 0, cz - half_size))
+            v1 = builder.add_vertex((cx + half_size, 0, cz - half_size))
+            v2 = builder.add_vertex((cx + half_size, 0, cz + half_size))
+            v3 = builder.add_vertex((cx - half_size, 0, cz + half_size))
+            
+            # Two triangles per block
+            builder.add_triangle(block_submesh, v0, v1, v2)
+            builder.add_triangle(block_submesh, v0, v2, v3)
+        
+        # Validate
+        error = builder.check()
+        self.assertEqual(error, "")
+        self.assertEqual(builder.submesh_count(), 1)
+    
+    def test_mesh_builder_with_hexagonal_packing(self):
+        """Test MeshBuilder with hexagonal packing points."""
+        # Generate hexagonal packing
+        points = hexagonal_packing(spacing=2.0, rows=5, cols=5, center_origin=True)
+        
+        builder = MeshBuilder()
+        builder.add_submesh()
+        builder.add_uv_set()
+        
+        # Create hexagonal prisms at each packing point
+        for point in points:
+            x, y, z = point
+            
+            # Hexagon vertices (top face)
+            hex_vertices_top = []
+            hex_vertices_bottom = []
+            for i in range(6):
+                angle = i * (2 * np.pi / 6)
+                hx = x + 0.5 * np.cos(angle)
+                hz = z + 0.5 * np.sin(angle)
+                hex_vertices_bottom.append(builder.add_vertex((hx, y, hz)))
+                hex_vertices_top.append(builder.add_vertex((hx, y + 1.0, hz)))
+            
+            # Create triangles for hexagonal prism
+            # Top face (fan from center)
+            center_top = builder.add_vertex((x, y + 1.0, z))
+            for i in range(6):
+                next_i = (i + 1) % 6
+                builder.add_triangle(0, center_top, hex_vertices_top[i], hex_vertices_top[next_i])
+            
+            # Bottom face (fan from center)
+            center_bottom = builder.add_vertex((x, y, z))
+            for i in range(6):
+                next_i = (i + 1) % 6
+                builder.add_triangle(0, center_bottom, hex_vertices_bottom[next_i], hex_vertices_bottom[i])
+        
+        # Validate
+        if builder.vertex_count() > 0:
+            error = builder.check()
+            self.assertEqual(error, "")
+    
+    def test_mesh_builder_multiple_uv_sets_with_terrain(self):
+        """Test MeshBuilder with multiple UV sets for terrain blending."""
+        # Create small terrain
+        terrain = HeightFieldTerrain(width=8, height=8, cell_size=1.0, seed=42)
+        terrain.generate_fractal_terrain()
+        
+        vertices, indices = terrain.to_mesh_data()
+        
+        builder = MeshBuilder()
+        builder.add_submesh()
+        
+        # Add two UV sets (e.g., for base texture and detail texture)
+        builder.add_uv_set()  # UV0: base texture coordinates
+        builder.add_uv_set()  # UV1: detail texture coordinates
+        
+        # Add vertices
+        for vertex in vertices:
+            builder.add_vertex(vertex)
+        
+        # Add triangles
+        for i in range(0, len(indices), 3):
+            builder.add_triangle(0, indices[i], indices[i+1], indices[i+2])
+        
+        # Generate UVs for both sets
+        # UV0: Standard planar mapping
+        uv0_data = []
+        for vertex in vertices:
+            u = (vertex[0] + 4) / 8  # Normalize to 0-1
+            v = (vertex[2] + 4) / 8
+            uv0_data.append([u, v])
+        builder.uvs[0] = np.array(uv0_data, dtype=np.float32)
+        
+        # UV1: Detail mapping (tiled 4x)
+        uv1_data = []
+        for vertex in vertices:
+            u = ((vertex[0] + 4) / 8) * 4  # Tiled
+            v = ((vertex[2] + 4) / 8) * 4
+            uv1_data.append([u, v])
+        builder.uvs[1] = np.array(uv1_data, dtype=np.float32)
+        
+        # Calculate tangents
+        triangles_arr = np.array(indices, dtype=np.uint32).reshape(-1, 3)
+        builder.tangent = MeshBuilder.calculate_tangent(
+            builder.position, builder.uvs[0], triangles_arr
+        )
+        
+        # Add normals (upward for flat terrain approximation)
+        builder.normal = np.tile([0, 1, 0], (builder.vertex_count(), 1)).astype(np.float32)
+        
+        # Validate
+        error = builder.check()
+        self.assertEqual(error, "")
+        self.assertEqual(builder.uv_count(), 2)
+        self.assertTrue(builder.contained_normal())
+        self.assertTrue(builder.contained_tangent())
+    
+    def test_mesh_builder_submesh_per_building_style(self):
+        """Test MeshBuilder with submeshes for different building styles."""
+        # Generate buildings with different styles
+        gen = BuildingGenerator(seed=42)
+        block = CityBlock(center=(0, 0), size=100)
+        buildings = gen.populate_block(block, density=0.5)
+        
+        builder = MeshBuilder()
+        
+        # Create a submesh for each building style
+        style_submeshes = {}
+        for style in BuildingStyle:
+            style_submeshes[style] = builder.add_submesh()
+        
+        # Add simplified building geometry
+        for building in buildings[:5]:  # Limit to first 5
+            params = building.params
+            submesh_idx = style_submeshes.get(params.style, 0)
+            
+            # Calculate building center from footprint
+            footprint = building.footprint
+            cx = sum(p[0] for p in footprint) / len(footprint)
+            cz = sum(p[1] for p in footprint) / len(footprint)
+            
+            width = params.width
+            depth = params.depth
+            height = params.height
+            
+            # Bottom face vertices
+            v0 = builder.add_vertex((cx - width/2, 0, cz - depth/2))
+            v1 = builder.add_vertex((cx + width/2, 0, cz - depth/2))
+            v2 = builder.add_vertex((cx + width/2, 0, cz + depth/2))
+            v3 = builder.add_vertex((cx - width/2, 0, cz + depth/2))
+            
+            # Top face vertices
+            v4 = builder.add_vertex((cx - width/2, height, cz - depth/2))
+            v5 = builder.add_vertex((cx + width/2, height, cz - depth/2))
+            v6 = builder.add_vertex((cx + width/2, height, cz + depth/2))
+            v7 = builder.add_vertex((cx - width/2, height, cz + depth/2))
+            
+            # Top face triangles
+            builder.add_triangle(submesh_idx, v4, v5, v6)
+            builder.add_triangle(submesh_idx, v4, v6, v7)
+        
+        # Validate
+        if builder.vertex_count() > 0:
+            error = builder.check()
+            self.assertEqual(error, "")
+            self.assertEqual(builder.submesh_count(), len(BuildingStyle))
+    
+    def test_mesh_builder_building_with_floors(self):
+        """Test MeshBuilder creating detailed building with floor subdivisions."""
+        gen = BuildingGenerator(seed=42)
+        params = BuildingParameters(
+            width=20, depth=15, height=30, floors=10,
+            style=BuildingStyle.MODERN, seed=42
+        )
+        building = gen.generate_building(params)
+        
+        builder = MeshBuilder()
+        walls_submesh = builder.add_submesh()
+        roof_submesh = builder.add_submesh()
+        
+        # Create footprint from building data
+        footprint = building.footprint
+        height = building.params.height
+        floors = building.params.floors
+        floor_height = height / floors
+        
+        # Generate wall vertices with floor subdivisions
+        wall_vertices_bottom = []
+        wall_vertices_top = []
+        
+        for i, (x, z) in enumerate(footprint):
+            # Bottom vertices
+            v_bottom = builder.add_vertex((x, 0, z))
+            wall_vertices_bottom.append(v_bottom)
+            
+            # Top vertices
+            v_top = builder.add_vertex((x, height, z))
+            wall_vertices_top.append(v_top)
+        
+        # Create wall faces (with floor lines as additional geometry)
+        n = len(footprint)
+        for i in range(n):
+            next_i = (i + 1) % n
+            
+            # Wall quad: bottom[i], bottom[next], top[next], top[i]
+            v0 = wall_vertices_bottom[i]
+            v1 = wall_vertices_bottom[next_i]
+            v2 = wall_vertices_top[next_i]
+            v3 = wall_vertices_top[i]
+            
+            # Two triangles per wall
+            builder.add_triangle(walls_submesh, v0, v1, v2)
+            builder.add_triangle(walls_submesh, v0, v2, v3)
+        
+        # Create roof (fan triangulation)
+        # Calculate roof center
+        cx = sum(p[0] for p in footprint) / len(footprint)
+        cz = sum(p[1] for p in footprint) / len(footprint)
+        roof_center = builder.add_vertex((cx, height, cz))
+        
+        for i in range(n):
+            next_i = (i + 1) % n
+            builder.add_triangle(roof_submesh, roof_center, wall_vertices_top[i], wall_vertices_top[next_i])
+        
+        error = builder.check()
+        self.assertEqual(error, "")
+        self.assertEqual(builder.submesh_count(), 2)
+    
+    def test_mesh_builder_complete_city_meshes(self):
+        """Test MeshBuilder generating meshes for complete city."""
+        city = generate_complete_city(
+            num_blocks_x=2, num_blocks_z=2,
+            block_size=40, street_width=8, seed=42
+        )
+        
+        builder = MeshBuilder()
+        building_submesh = builder.add_submesh()
+        street_submesh = builder.add_submesh()
+        
+        # Generate building meshes
+        for building in city["buildings"][:10]:  # Limit for performance
+            params = building.params
+            footprint = building.footprint
+            
+            # Calculate center
+            cx = sum(p[0] for p in footprint) / len(footprint)
+            cz = sum(p[1] for p in footprint) / len(footprint)
+            
+            width = params.width
+            depth = params.depth
+            height = params.height
+            
+            # Simple box for each building
+            base_vertices = []
+            top_vertices = []
+            
+            # Create 4 corners
+            corners = [
+                (cx - width/2, cz - depth/2),
+                (cx + width/2, cz - depth/2),
+                (cx + width/2, cz + depth/2),
+                (cx - width/2, cz + depth/2),
+            ]
+            
+            for x, z in corners:
+                base_vertices.append(builder.add_vertex((x, 0, z)))
+                top_vertices.append(builder.add_vertex((x, height, z)))
+            
+            # Create walls
+            for i in range(4):
+                next_i = (i + 1) % 4
+                builder.add_triangle(building_submesh, base_vertices[i], base_vertices[next_i], top_vertices[next_i])
+                builder.add_triangle(building_submesh, base_vertices[i], top_vertices[next_i], top_vertices[i])
+            
+            # Create roof
+            for i in range(1, 3):
+                builder.add_triangle(building_submesh, top_vertices[0], top_vertices[i], top_vertices[i + 1])
+        
+        # Generate street meshes (simple quads)
+        for street in city["streets"][:5]:  # Limit streets
+            x, z, w, d = street
+            
+            v0 = builder.add_vertex((x, 0.1, z))  # Slightly above ground
+            v1 = builder.add_vertex((x + w, 0.1, z))
+            v2 = builder.add_vertex((x + w, 0.1, z + d))
+            v3 = builder.add_vertex((x, 0.1, z + d))
+            
+            builder.add_triangle(street_submesh, v0, v1, v2)
+            builder.add_triangle(street_submesh, v0, v2, v3)
+        
+        error = builder.check()
+        self.assertEqual(error, "")
+        self.assertGreaterEqual(builder.submesh_count(), 2)
+    
+    def test_mesh_builder_heightfield_with_normals(self):
+        """Test MeshBuilder with heightfield including normal calculation."""
+        # Create terrain with specific features
+        terrain = HeightFieldTerrain(width=32, height=32, cell_size=1.0, seed=42)
+        terrain.generate_fractal_terrain(roughness=0.5)
+        terrain.thermal_erosion(iterations=10)
+        
+        # Get mesh data
+        vertices, indices = terrain.to_mesh_data()
+        
+        builder = MeshBuilder()
+        builder.add_submesh()
+        
+        # Add all vertices
+        for vertex in vertices:
+            builder.add_vertex(vertex)
+        
+        # Add triangles
+        indices_arr = np.array(indices, dtype=np.uint32)
+        for i in range(0, len(indices_arr), 3):
+            builder.add_triangle(0, indices_arr[i], indices_arr[i+1], indices_arr[i+2])
+        
+        # Calculate normals from heightfield (more accurate than flat)
+        normals = []
+        for y in range(terrain.height):
+            for x in range(terrain.width):
+                normal = terrain.get_normal_at(x, y)
+                normals.append(normal)
+        
+        builder.normal = np.array(normals, dtype=np.float32)
+        
+        # Add UVs (planar mapping)
+        builder.add_uv_set()
+        uvs = []
+        for y in range(terrain.height):
+            for x in range(terrain.width):
+                u = x / (terrain.width - 1)
+                v = y / (terrain.height - 1)
+                uvs.append([u, v])
+        builder.uvs[0] = np.array(uvs, dtype=np.float32)
+        
+        # Calculate tangents
+        triangles_arr = indices_arr.reshape(-1, 3)
+        builder.tangent = MeshBuilder.calculate_tangent(
+            builder.position, builder.uvs[0], triangles_arr
+        )
+        
+        error = builder.check()
+        self.assertEqual(error, "")
+        self.assertTrue(builder.contained_normal())
+        self.assertTrue(builder.contained_tangent())
+    
+    def test_mesh_builder_heightfield_lod(self):
+        """Test MeshBuilder creating LOD meshes from heightfield."""
+        terrain = HeightFieldTerrain(width=64, height=64, cell_size=1.0, seed=42)
+        terrain.generate_fractal_terrain()
+        
+        # Create LOD levels by sampling
+        lod_levels = [1, 2, 4]  # Full, half, quarter resolution
+        
+        for lod in lod_levels:
+            builder = MeshBuilder()
+            builder.add_submesh()
+            
+            step = lod
+            lod_width = terrain.width // step
+            lod_height = terrain.height // step
+            
+            # Sample vertices at LOD resolution
+            vertex_map = {}  # (x, y) -> vertex index
+            for y in range(0, terrain.height, step):
+                for x in range(0, terrain.width, step):
+                    height = terrain.get_height_at(x, y)
+                    vx = x * terrain.cell_size
+                    vz = y * terrain.cell_size
+                    idx = builder.add_vertex((vx, height, vz))
+                    vertex_map[(x // step, y // step)] = idx
+            
+            # Create triangles
+            for y in range(lod_height - 1):
+                for x in range(lod_width - 1):
+                    v0 = vertex_map[(x, y)]
+                    v1 = vertex_map[(x + 1, y)]
+                    v2 = vertex_map[(x + 1, y + 1)]
+                    v3 = vertex_map[(x, y + 1)]
+                    
+                    builder.add_triangle(0, v0, v1, v2)
+                    builder.add_triangle(0, v0, v2, v3)
+            
+            error = builder.check()
+            self.assertEqual(error, "")
+            
+            # Verify vertex count decreases with higher LOD
+            expected_vertices = lod_width * lod_height
+            self.assertEqual(builder.vertex_count(), expected_vertices)
+    
+    def test_mesh_builder_extrude_building_detailed(self):
+        """Test MeshBuilder with detailed extruded building."""
+        # Create complex footprint with more points
+        footprint = [
+            (0, 0), (10, 0), (15, 5), (10, 10), (5, 12), (0, 10)
+        ]
+        
+        building = extrude_building(footprint, height=25.0, floors=8)
+        
+        builder = MeshBuilder()
+        walls_submesh = builder.add_submesh()
+        roof_submesh = builder.add_submesh()
+        
+        # Track unique vertices to avoid duplicates
+        vertex_cache = {}
+        
+        def get_vertex(x, y, z):
+            key = (round(x, 6), round(y, 6), round(z, 6))
+            if key not in vertex_cache:
+                vertex_cache[key] = builder.add_vertex((x, y, z))
+            return vertex_cache[key]
+        
+        # Create walls from building data
+        for wall in building["walls"]:
+            vertices = wall["vertices"]  # List of (x, y, z) tuples
+            
+            # Wall should have 4 vertices (bottom-left, bottom-right, top-right, top-left)
+            if len(vertices) >= 4:
+                v0 = get_vertex(*vertices[0])
+                v1 = get_vertex(*vertices[1])
+                v2 = get_vertex(*vertices[2])
+                v3 = get_vertex(*vertices[3])
+                
+                # Two triangles per wall
+                builder.add_triangle(walls_submesh, v0, v1, v2)
+                builder.add_triangle(walls_submesh, v0, v2, v3)
+        
+        # Create roof
+        roof_vertices = building["roof"]["vertices"]
+        roof_indices = []
+        for v in roof_vertices:
+            roof_indices.append(get_vertex(*v))
+        
+        # Fan triangulation for roof
+        if len(roof_indices) >= 3:
+            for i in range(1, len(roof_indices) - 1):
+                builder.add_triangle(roof_submesh, roof_indices[0], roof_indices[i], roof_indices[i + 1])
+        
+        # Create floor slabs as separate submesh
+        floors_submesh = builder.add_submesh()
+        for floor_slab in building["floor_slabs"][::4]:  # Every 4th floor
+            floor_vertices = floor_slab["vertices"]
+            floor_indices = []
+            for v in floor_vertices:
+                floor_indices.append(get_vertex(*v))
+            
+            if len(floor_indices) >= 3:
+                for i in range(1, len(floor_indices) - 1):
+                    builder.add_triangle(floors_submesh, floor_indices[0], floor_indices[i], floor_indices[i + 1])
+        
+        error = builder.check()
+        self.assertEqual(error, "")
+        self.assertGreaterEqual(builder.submesh_count(), 2)
+    
+    def test_mesh_builder_extrude_building_rounded(self):
+        """Test MeshBuilder with rounded building extrusion."""
+        # Create rounded footprint using many points
+        import math
+        radius = 10.0
+        segments = 16
+        footprint = []
+        for i in range(segments):
+            angle = 2 * math.pi * i / segments
+            x = radius * math.cos(angle)
+            z = radius * math.sin(angle)
+            footprint.append((x, z))
+        
+        building = extrude_building(footprint, height=20.0, floors=5)
+        
+        builder = MeshBuilder()
+        builder.add_submesh()
+        builder.add_uv_set()
+        
+        # Add vertices
+        vertex_cache = {}
+        
+        def get_vertex(x, y, z):
+            key = (round(x, 6), round(y, 6), round(z, 6))
+            if key not in vertex_cache:
+                vertex_cache[key] = builder.add_vertex((x, y, z))
+            return vertex_cache[key]
+        
+        # Create cylindrical walls
+        for wall in building["walls"]:
+            vertices = wall["vertices"]
+            if len(vertices) >= 4:
+                v0 = get_vertex(*vertices[0])
+                v1 = get_vertex(*vertices[1])
+                v2 = get_vertex(*vertices[2])
+                v3 = get_vertex(*vertices[3])
+                
+                builder.add_triangle(0, v0, v1, v2)
+                builder.add_triangle(0, v0, v2, v3)
+        
+        # Create top cap (circle fan)
+        roof_vertices = building["roof"]["vertices"]
+        center_x = sum(v[0] for v in roof_vertices) / len(roof_vertices)
+        center_z = sum(v[2] for v in roof_vertices) / len(roof_vertices)
+        center_y = building["height"]
+        
+        center_idx = get_vertex(center_x, center_y, center_z)
+        roof_indices = [get_vertex(*v) for v in roof_vertices]
+        
+        for i in range(len(roof_indices)):
+            next_i = (i + 1) % len(roof_indices)
+            builder.add_triangle(0, center_idx, roof_indices[i], roof_indices[next_i])
+        
+        # Generate UVs for cylindrical mapping
+        uvs = []
+        for i in range(builder.vertex_count()):
+            pos = builder.position[i]
+            # Cylindrical UV mapping
+            angle = math.atan2(pos[2], pos[0])
+            u = (angle / (2 * math.pi) + 0.5)
+            v = pos[1] / building["height"]
+            uvs.append([u, v])
+        
+        builder.uvs[0] = np.array(uvs, dtype=np.float32)
+        
+        error = builder.check()
+        self.assertEqual(error, "")
+
+
 class TestIntegration(unittest.TestCase):
     """Integration tests combining multiple modules."""
+
     
     def test_forest_scene_workflow(self):
         """Test complete forest scene workflow."""

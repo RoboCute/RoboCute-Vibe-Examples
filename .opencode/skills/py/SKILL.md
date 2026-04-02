@@ -137,7 +137,7 @@ data_comp.bind_event(re.world.DataComponentEventType.BeforeFrame, "my_callback")
 ```python
 # Option 1: Built-in loop
 app.set_user_callback(tick_logic)  # Called every frame
-app.run()
+app.run(prepare_denoise: bool = False, limit_frame=None)
 
 # Option 2: Manual loop
 while not ctx.should_close():

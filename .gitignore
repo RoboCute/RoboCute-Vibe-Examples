@@ -154,3 +154,5 @@ src/uipc
 dist/
 src/
 output/
+samples/
+*.mdb
