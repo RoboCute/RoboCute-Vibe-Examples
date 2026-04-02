@@ -44,7 +44,7 @@ def extract_tar_gz(directory, current_dir):
         folder_path = tar_path.with_suffix('') / 'src'
         # Copy folder_path to current dir
         if folder_path.exists():
-            shutil.rmtree('src/')
+            shutil.rmtree('src/', ignore_errors=True)
             shutil.move(folder_path, '.')
             
         
