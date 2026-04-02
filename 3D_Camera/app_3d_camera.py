@@ -69,7 +69,7 @@ class MovingTarget:
         # Create material
         mat = re.world.MaterialResource()
         mat_json = '''{
-            "type": "default",
+            "type": "pbr",
             "base_color": [1.0, 0.2, 0.2],
             "roughness": 0.3,
             "metallic": 0.1
@@ -335,7 +335,7 @@ class CameraDemoApp:
         # Grid material
         mat = re.world.MaterialResource()
         mat_json = '''{
-            "type": "default",
+            "type": "pbr",
             "base_color": [0.3, 0.35, 0.4],
             "roughness": 0.8,
             "metallic": 0.0
@@ -387,7 +387,7 @@ class CameraDemoApp:
             
             mat = re.world.MaterialResource()
             mat_json = '''{
-                "type": "default",
+                "type": "pbr",
                 "base_color": [0.8, 0.6, 0.2],
                 "roughness": 0.5,
                 "metallic": 0.0

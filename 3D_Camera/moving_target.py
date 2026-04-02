@@ -21,6 +21,7 @@ import robocute.rbc_ext as re
 import robocute.rbc_ext.luisa as lc
 
 from camera_math import Vector3, lerp_vector
+from mesh_builder import MeshBuilder
 
 
 class MovementPattern(Enum):
@@ -72,10 +73,13 @@ class MovingTarget:
         self.random_target = self.current_position.copy()
         
         # Create entity and visual
+        print(0)
         self.entity = self._create_entity()
+        print(1)
         self.transform = re.world.TransformComponent(
             self.entity.get_component("TransformComponent")
         )
+        print(2)
         
         # Event callbacks
         self.on_position_changed: Optional[Callable[[Vector3], None]] = None
@@ -95,65 +99,66 @@ class MovingTarget:
             ),
             recursive=False
         )
-        
         # Create visual mesh (sphere-like)
         self._create_sphere_mesh(entity)
         
         return entity
     
     def _create_sphere_mesh(self, entity: re.world.Entity):
-        """Create a simple sphere mesh"""
+        """Create a simple sphere mesh using MeshBuilder"""
         render = re.world.RenderComponent(entity.add_component("RenderComponent"))
         
-        mesh = re.world.MeshResource()
+        # Create mesh using MeshBuilder
+        builder = MeshBuilder()
         
-        # Create an icosphere-like approximation (simplified)
+        # Sphere parameters
         segments = 16
         rings = 8
         radius = 0.5
         
-        vertex_count = (segments + 1) * (rings + 1)
-        triangle_count = segments * rings * 2
+        # Add a submesh for the sphere
+        submesh_idx = builder.add_submesh()
         
-        submesh_offsets = np.array([0], dtype=np.uint32)
-        mesh.create_empty(
-            submesh_offsets, vertex_count, triangle_count,
-            uv_count=1, contained_normal=True, contained_tangent=False
-        )
-        
-        pos_buffer = mesh.pos_buffer()
+        # Add a UV set
+        uv_set_idx = builder.add_uv_set()
         
         # Generate sphere vertices
-        vertices = []
         for ring in range(rings + 1):
             phi = math.pi * ring / rings
+            v_coord = 1.0 - (ring / rings)  # Flip V for correct texture orientation
+            
             for seg in range(segments + 1):
                 theta = 2 * math.pi * seg / segments
+                u_coord = seg / segments
                 
+                # Calculate position
                 x = radius * math.sin(phi) * math.cos(theta)
                 y = radius * math.cos(phi)
                 z = radius * math.sin(phi) * math.sin(theta)
                 
-                vertices.append([x, y, z])
+                # Add vertex
+                vertex_idx = builder.add_vertex((x, y, z))
+                
+                # Calculate normal (normalized position for sphere)
+                normal = np.array([x, y, z], dtype=np.float32)
+                normal_len = np.linalg.norm(normal)
+                if normal_len > 0:
+                    normal = normal / normal_len
+                
+                # Add normal
+                if builder.normal.shape[0] == 0:
+                    builder.normal = normal.reshape(1, 3)
+                else:
+                    builder.normal = np.vstack([builder.normal, normal.reshape(1, 3)])
+                
+                # Add UV
+                uv = np.array([u_coord, v_coord], dtype=np.float32).reshape(1, 2)
+                if builder.uvs[uv_set_idx].shape[0] == 0:
+                    builder.uvs[uv_set_idx] = uv
+                else:
+                    builder.uvs[uv_set_idx] = np.vstack([builder.uvs[uv_set_idx], uv])
         
-        # Fill position buffer
-        for i, v in enumerate(vertices):
-            if i < vertex_count:
-                pos_buffer[i] = lc.double3(v[0], v[1], v[2])
-        
-        # Fill data buffer (positions + indices)
-        data_size = vertex_count * 4 + triangle_count * 3
-        arr = np.ndarray(data_size, dtype=np.float32, buffer=mesh.data_buffer())
-        
-        for i, v in enumerate(vertices):
-            if i < vertex_count:
-                arr[i * 4 + 0] = v[0]
-                arr[i * 4 + 1] = v[1]
-                arr[i * 4 + 2] = v[2]
-                arr[i * 4 + 3] = 1.0
-        
-        # Generate and fill indices
-        indices = []
+        # Generate triangles
         for ring in range(rings):
             for seg in range(segments):
                 current = ring * (segments + 1) + seg
@@ -161,29 +166,32 @@ class MovingTarget:
                 next_ring = (ring + 1) * (segments + 1) + seg
                 next_ring_seg = next_ring + 1
                 
-                indices.extend([current, next_ring, next_seg])
-                indices.extend([next_seg, next_ring, next_ring_seg])
+                # Add two triangles per quad
+                builder.add_triangle(submesh_idx, current, next_ring, next_seg)
+                builder.add_triangle(submesh_idx, next_seg, next_ring, next_ring_seg)
         
-        index_start = vertex_count * 4
-        for i, idx in enumerate(indices):
-            if i < triangle_count * 3:
-                arr[index_start + i] = float(idx)
+        # Validate and write mesh
+        mesh = builder.write_to_mesh()
         
         # Create material (red ball)
         mat = re.world.MaterialResource()
         mat_json = '''{
-            "type": "default",
+            "type": "pbr",
             "base_color": [0.9, 0.2, 0.2],
             "roughness": 0.3,
             "metallic": 0.1
         }'''
         mat.load_from_json(mat_json)
-        
+        print('finished')
         mat_vector = lc.capsule_vector()
+        print(2)
         mat_vector.emplace_back(mat._handle)
-        
-        render.update_object(mat_vector, mesh)
+        print(3)
         mesh.install()
+        print(6)
+        render.update_object(mat_vector, mesh)
+        print(4)
+        print(5)
     
     def update(self, delta_time: float):
         """Update target position based on movement pattern"""

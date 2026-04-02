@@ -54,14 +54,18 @@ class SmoothFollowDemo:
             project_path = Path(__file__).parent
         
         # Initialize app
+        print('1')
+        
         self.app = rbc.app.App()
         self.app.init(project_path=project_path, backend_name=backend)
+        self.app._tick_stage = re.world.TickStage.RasterPreview
+        print('init')
         
         if not headless:
             self.app.init_display(1280, 720)
         
         self.ctx = self.app.ctx
-        self.scene = self.ctx.scene()
+        self.scene = self.app.scene
         
         print("=" * 60)
         print("Smooth Follow Camera Demo")
@@ -115,7 +119,6 @@ class SmoothFollowDemo:
             radius=10.0,
             base_height=1.0
         )
-        
         self.target = MovingTarget(self.scene, "player_target", config)
         
         print("Target Configuration:")
@@ -180,8 +183,8 @@ class SmoothFollowDemo:
         print(f"{'Frame':>6} | {'Camera X':>8} | {'Camera Y':>8} | {'Camera Z':>8} | {'Distance':>10}")
         print("-" * 60)
         
-        def tick_logic(delta_time):
-            self.update(delta_time)
+        def tick_logic():
+            self.update(self.app._delta_time)
             
             # Get camera and target info
             camera = self.camera_manager.get_camera("main")
@@ -248,7 +251,7 @@ def main():
     
     # Parse arguments
     pattern = "circle"
-    limit_frames = 256
+    limit_frames = None
     headless = False
     project_path = None
     backend = "dx"
@@ -291,7 +294,6 @@ Examples:
     python smooth_follow_demo.py --project /path/to/project --backend cuda
             """)
             return
-    
     run_smooth_follow_demo(
         pattern=pattern,
         limit_frames=limit_frames,

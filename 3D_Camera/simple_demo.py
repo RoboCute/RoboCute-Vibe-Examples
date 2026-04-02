@@ -161,7 +161,7 @@ class MovingBall:
         # Material
         mat = re.world.MaterialResource()
         mat_json = '''{
-            "type": "default",
+            "type": "pbr",
             "base_color": [0.9, 0.3, 0.2],
             "roughness": 0.4,
             "metallic": 0.2
