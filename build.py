@@ -63,6 +63,12 @@ def main():
         action="store_true",
         help="Force rebuild by passing -r to build_and_copy.py",
     )
+    parser.add_argument(
+        "-m", "--mode",
+        choices=["release", "debug"],
+        default="release",
+        help="Build mode: release or debug (default: release)",
+    )
     args = parser.parse_args()
     if not args.work_dir:
         print('RoboCute directory require in argument!')
@@ -71,11 +77,11 @@ def main():
     dist_dir = work_dir / "dist"
     current_dir = Path.cwd()
 
-    # Run xmake f -m release -c
-    run_command(["xmake", "f", "-m", "release", "-c"], cwd=work_dir)
+    # Run xmake f -m <mode> -c
+    run_command(["xmake", "f", "-m", args.mode, "-c"], cwd=work_dir)
 
     # Run xmake
-    build_cmd = ['uv', 'run', 'scripts/build_and_copy.py', '-m', 'release']
+    build_cmd = ['uv', 'run', 'scripts/build_and_copy.py', '-m', args.mode]
     if args.rebuild:
         build_cmd.insert(3, '-r')
     run_command(build_cmd, cwd=work_dir)

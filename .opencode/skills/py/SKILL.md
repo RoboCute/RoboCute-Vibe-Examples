@@ -312,3 +312,8 @@ scene = project.import_scene('path.gltf', extra_meta='{}')
 - **Mesh updates**: Call `ctx.upload_mesh_data(mesh)` after CPU-side modifications
 - **Install resources**: Call `resource.install()` before using in render
 - **Cleanup**: Call `dispose()` or `del obj` to release C++ resources
+
+
+## Python-binding API Reference:
+- **World-API** src/robocute/rbc_ext/generated/world_v2.py
+- **LUISA-Shader** src/robocute/rbc_ext/generated/luisa/

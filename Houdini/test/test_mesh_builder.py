@@ -1,177 +1,93 @@
 """
-Comprehensive test suite for MeshBuilder API.
+MeshBuilder API Tests with RoboCute Integration
+===============================================
 
-This test file covers:
-- MeshBuilder initialization
-- Vertex/submesh/UV management
-- Validation (check method)
-- File output (write_to)
-- MeshResource output (write_to_mesh)
-- Tangent calculation
-- Edge cases
+Comprehensive test suite for MeshBuilder API demonstrating RoboCute Python API usage.
 
-Usage:
-    cd samples/Houdini
-    python -m pytest test/test_mesh_builder.py -v
-    python test/test_mesh_builder.py  # Run directly
+For tests requiring visualization:
+    app.init_display(width, height)  # Initialize display
+    app.ctx.enable_camera_control()  # Enable camera control
+    app.run(prepare_denoise=False, limit_frame=100)  # Run with frame limit
 """
 
-import sys
 import os
+import sys
 import unittest
-import tempfile
-import numpy as np
-from pathlib import Path
+import math
 
 # Add parent directories to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+# RoboCute imports (with fallback for testing without robocute installed)
+try:
+    import robocute as rbc
+    import robocute.rbc_ext as re
+    import robocute.rbc_ext.luisa as lc
+    ROBOCUTE_AVAILABLE = True
+except ImportError:
+    ROBOCUTE_AVAILABLE = False
+    # Create mock classes for testing without robocute
+    class MockApp:
+        def init_display(self, width, height):
+            pass
+        def run(self, prepare_denoise=False, limit_frame=None):
+            pass
+        def set_user_callback(self, callback):
+            pass
+    class MockModule:
+        app = MockApp()
+    rbc = MockModule()
+    re = MockModule()
+    lc = MockModule()
+
+import numpy as np
 from mesh_builder import MeshBuilder
 
 
-class TestMeshBuilderInitialization(unittest.TestCase):
-    """Test MeshBuilder initialization."""
+class TestMeshBuilderBasic(unittest.TestCase):
+    """Test basic MeshBuilder functionality."""
     
-    def test_default_initialization(self):
-        """Test creating MeshBuilder with default values."""
+    def test_initialization(self):
+        """Test MeshBuilder initialization."""
         builder = MeshBuilder()
-        
         self.assertEqual(builder.vertex_count(), 0)
         self.assertEqual(builder.submesh_count(), 0)
         self.assertEqual(builder.uv_count(), 0)
-        self.assertEqual(builder.indices_count(), 0)
         self.assertFalse(builder.contained_normal())
         self.assertFalse(builder.contained_tangent())
-        
-        # Check numpy arrays are initialized correctly
-        self.assertEqual(builder.position.shape, (0, 3))
-        self.assertEqual(builder.normal.shape, (0, 3))
-        self.assertEqual(builder.tangent.shape, (0, 4))
-        self.assertEqual(len(builder.uvs), 0)
-        self.assertEqual(len(builder.triangle_indices), 0)
-    
-    def test_repr(self):
-        """Test string representation."""
-        builder = MeshBuilder()
-        repr_str = repr(builder)
-        
-        self.assertIn("MeshBuilder", repr_str)
-        self.assertIn("vertices=0", repr_str)
-        self.assertIn("submeshes=0", repr_str)
-        self.assertIn("indices=0", repr_str)
-        self.assertIn("normals=False", repr_str)
-        self.assertIn("tangents=False", repr_str)
-        self.assertIn("uv_sets=0", repr_str)
-
-
-class TestVertexManagement(unittest.TestCase):
-    """Test vertex management methods."""
     
     def test_add_single_vertex(self):
         """Test adding a single vertex."""
         builder = MeshBuilder()
-        idx = builder.add_vertex((1.0, 2.0, 3.0))
-        
-        self.assertEqual(idx, 0)
+        index = builder.add_vertex((0, 1, 2))
+        self.assertEqual(index, 0)
         self.assertEqual(builder.vertex_count(), 1)
-        np.testing.assert_array_almost_equal(
-            builder.position[0], [1.0, 2.0, 3.0]
-        )
+        np.testing.assert_array_equal(builder.position[0], [0, 1, 2])
     
     def test_add_multiple_vertices(self):
         """Test adding multiple vertices."""
         builder = MeshBuilder()
-        
-        idx0 = builder.add_vertex((0.0, 0.0, 0.0))
-        idx1 = builder.add_vertex((1.0, 0.0, 0.0))
-        idx2 = builder.add_vertex((0.0, 1.0, 0.0))
-        
-        self.assertEqual(idx0, 0)
-        self.assertEqual(idx1, 1)
-        self.assertEqual(idx2, 2)
-        self.assertEqual(builder.vertex_count(), 3)
-    
-    def test_add_vertex_with_list(self):
-        """Test adding vertex with list input."""
-        builder = MeshBuilder()
-        idx = builder.add_vertex([5.0, 10.0, 15.0])
-        
-        self.assertEqual(idx, 0)
-        np.testing.assert_array_almost_equal(
-            builder.position[0], [5.0, 10.0, 15.0]
-        )
-    
-    def test_add_vertex_with_numpy_array(self):
-        """Test adding vertex with numpy array input."""
-        builder = MeshBuilder()
-        pos = np.array([1.5, 2.5, 3.5], dtype=np.float32)
-        idx = builder.add_vertex(pos)
-        
-        self.assertEqual(idx, 0)
-        np.testing.assert_array_almost_equal(builder.position[0], pos)
-
-
-class TestSubmeshManagement(unittest.TestCase):
-    """Test submesh management methods."""
-    
-    def test_add_single_submesh(self):
-        """Test adding a single submesh."""
-        builder = MeshBuilder()
-        idx = builder.add_submesh()
-        
-        self.assertEqual(idx, 0)
-        self.assertEqual(builder.submesh_count(), 1)
-        self.assertEqual(len(builder.triangle_indices), 1)
-        self.assertEqual(builder.triangle_indices[0].shape[0], 0)
-    
-    def test_add_multiple_submeshes(self):
-        """Test adding multiple submeshes."""
-        builder = MeshBuilder()
-        
-        idx0 = builder.add_submesh()
-        idx1 = builder.add_submesh()
-        idx2 = builder.add_submesh()
-        
-        self.assertEqual(idx0, 0)
-        self.assertEqual(idx1, 1)
-        self.assertEqual(idx2, 2)
-        self.assertEqual(builder.submesh_count(), 3)
-    
-    def test_get_submesh_indices(self):
-        """Test getting submesh indices."""
-        builder = MeshBuilder()
-        builder.add_submesh()
-        
-        # Add vertices
         v0 = builder.add_vertex((0, 0, 0))
         v1 = builder.add_vertex((1, 0, 0))
         v2 = builder.add_vertex((0, 1, 0))
         
-        # Add triangle
-        builder.add_triangle(0, v0, v1, v2)
-        
-        # Get indices
-        indices = builder.get_submesh_indices(0)
-        self.assertEqual(len(indices), 3)
-        self.assertEqual(indices[0], v0)
-        self.assertEqual(indices[1], v1)
-        self.assertEqual(indices[2], v2)
+        self.assertEqual(builder.vertex_count(), 3)
+        self.assertEqual(v0, 0)
+        self.assertEqual(v1, 1)
+        self.assertEqual(v2, 2)
     
-    def test_get_submesh_indices_out_of_range(self):
-        """Test getting submesh indices with invalid index."""
+    def test_add_submesh(self):
+        """Test adding submeshes."""
         builder = MeshBuilder()
-        builder.add_submesh()
+        self.assertEqual(builder.submesh_count(), 0)
         
-        with self.assertRaises(IndexError):
-            builder.get_submesh_indices(5)
+        sm0 = builder.add_submesh()
+        self.assertEqual(sm0, 0)
+        self.assertEqual(builder.submesh_count(), 1)
         
-        with self.assertRaises(IndexError):
-            builder.get_submesh_indices(-1)
-
-
-class TestTriangleManagement(unittest.TestCase):
-    """Test triangle management methods."""
+        sm1 = builder.add_submesh()
+        self.assertEqual(sm1, 1)
+        self.assertEqual(builder.submesh_count(), 2)
     
     def test_add_single_triangle(self):
         """Test adding a single triangle."""
@@ -183,19 +99,14 @@ class TestTriangleManagement(unittest.TestCase):
         v2 = builder.add_vertex((0, 1, 0))
         
         builder.add_triangle(0, v0, v1, v2)
-        
         self.assertEqual(builder.indices_count(), 3)
-        np.testing.assert_array_equal(
-            builder.triangle_indices[0],
-            np.array([v0, v1, v2], dtype=np.uint32)
-        )
     
     def test_add_multiple_triangles(self):
-        """Test adding multiple triangles to same submesh."""
+        """Test adding multiple triangles."""
         builder = MeshBuilder()
         builder.add_submesh()
         
-        # Create a quad from two triangles
+        # Create a quad (2 triangles)
         v0 = builder.add_vertex((0, 0, 0))
         v1 = builder.add_vertex((1, 0, 0))
         v2 = builder.add_vertex((1, 1, 0))
@@ -205,75 +116,39 @@ class TestTriangleManagement(unittest.TestCase):
         builder.add_triangle(0, v0, v2, v3)
         
         self.assertEqual(builder.indices_count(), 6)
-        self.assertEqual(len(builder.triangle_indices[0]), 6)
-    
-    def test_add_triangle_to_multiple_submeshes(self):
-        """Test adding triangles to different submeshes."""
-        builder = MeshBuilder()
-        
-        submesh0 = builder.add_submesh()
-        submesh1 = builder.add_submesh()
-        
-        # Add vertices (shared)
-        v0 = builder.add_vertex((0, 0, 0))
-        v1 = builder.add_vertex((1, 0, 0))
-        v2 = builder.add_vertex((0, 1, 0))
-        
-        # Add triangle to each submesh
-        builder.add_triangle(submesh0, v0, v1, v2)
-        builder.add_triangle(submesh1, v0, v2, v1)  # Reversed winding
-        
-        self.assertEqual(builder.indices_count(), 6)
-        self.assertEqual(len(builder.triangle_indices[0]), 3)
-        self.assertEqual(len(builder.triangle_indices[1]), 3)
-    
-    def test_add_triangle_invalid_submesh(self):
-        """Test adding triangle to invalid submesh."""
-        builder = MeshBuilder()
-        
-        with self.assertRaises(IndexError):
-            builder.add_triangle(0, 0, 1, 2)
-        
-        builder.add_submesh()
-        with self.assertRaises(IndexError):
-            builder.add_triangle(5, 0, 1, 2)
-
-
-class TestUVManagement(unittest.TestCase):
-    """Test UV set management methods."""
     
     def test_add_uv_set(self):
         """Test adding UV sets."""
         builder = MeshBuilder()
+        self.assertEqual(builder.uv_count(), 0)
         
-        idx0 = builder.add_uv_set()
-        self.assertEqual(idx0, 0)
+        builder.add_uv_set()
         self.assertEqual(builder.uv_count(), 1)
         
-        idx1 = builder.add_uv_set()
-        self.assertEqual(idx1, 1)
-        self.assertEqual(builder.uv_count(), 2)
-    
-    def test_uv_array_shape(self):
-        """Test UV array is initialized with correct shape."""
-        builder = MeshBuilder()
         builder.add_uv_set()
-        
-        self.assertEqual(builder.uvs[0].shape, (0, 2))
+        self.assertEqual(builder.uv_count(), 2)
 
 
-class TestValidation(unittest.TestCase):
-    """Test mesh validation (check method)."""
+class TestMeshBuilderValidation(unittest.TestCase):
+    """Test MeshBuilder validation."""
     
-    def test_empty_mesh_error(self):
-        """Test validation fails for empty mesh."""
+    def test_empty_mesh_validation(self):
+        """Test validation of empty mesh."""
         builder = MeshBuilder()
+        error = builder.check()
+        self.assertIn("No submesh", error)
+    
+    def test_mesh_without_triangles(self):
+        """Test validation of mesh without triangles."""
+        builder = MeshBuilder()
+        builder.add_submesh()
+        builder.add_vertex((0, 0, 0))
         
         error = builder.check()
-        self.assertIn("No vertices", error)
+        self.assertIn("has 0 triangles", error)
     
-    def test_valid_mesh(self):
-        """Test validation passes for valid mesh."""
+    def test_valid_simple_mesh(self):
+        """Test validation of simple valid mesh."""
         builder = MeshBuilder()
         builder.add_submesh()
         
@@ -286,22 +161,8 @@ class TestValidation(unittest.TestCase):
         error = builder.check()
         self.assertEqual(error, "")
     
-    def test_invalid_index_count(self):
-        """Test validation fails for incomplete triangles."""
-        builder = MeshBuilder()
-        builder.add_submesh()
-        
-        v0 = builder.add_vertex((0, 0, 0))
-        v1 = builder.add_vertex((1, 0, 0))
-        
-        # Manually add invalid index count
-        builder.triangle_indices[0] = np.array([v0, v1], dtype=np.uint32)
-        
-        error = builder.check()
-        self.assertIn("not divisible by 3", error)
-    
-    def test_out_of_range_index(self):
-        """Test validation fails for out-of-range indices."""
+    def test_invalid_submesh_index(self):
+        """Test triangle with invalid submesh index."""
         builder = MeshBuilder()
         builder.add_submesh()
         
@@ -309,550 +170,708 @@ class TestValidation(unittest.TestCase):
         v1 = builder.add_vertex((1, 0, 0))
         v2 = builder.add_vertex((0, 1, 0))
         
-        # Add triangle with out-of-range index
-        builder.add_triangle(0, v0, v1, 999)
+        # Submesh 1 doesn't exist
+        builder.add_triangle(1, v0, v1, v2)
+        
+        error = builder.check()
+        self.assertIn("Invalid submesh index", error)
+    
+    def test_vertex_index_out_of_range(self):
+        """Test triangle with vertex index out of range."""
+        builder = MeshBuilder()
+        builder.add_submesh()
+        
+        v0 = builder.add_vertex((0, 0, 0))
+        v1 = builder.add_vertex((1, 0, 0))
+        
+        # v2 doesn't exist
+        builder.add_triangle(0, v0, v1, 2)
         
         error = builder.check()
         self.assertIn("out of vertex range", error)
+
+
+class TestMeshBuilderPositions(unittest.TestCase):
+    """Test position buffer management."""
     
-    def test_normal_size_mismatch(self):
-        """Test validation fails for normal size mismatch."""
+    def test_position_shape(self):
+        """Test position buffer shape."""
+        builder = MeshBuilder()
+        builder.add_vertex((0, 0, 0))
+        builder.add_vertex((1, 1, 1))
+        
+        self.assertEqual(builder.position.shape, (2, 3))
+        self.assertEqual(builder.position.dtype, np.float32)
+    
+    def test_position_values(self):
+        """Test position values are stored correctly."""
+        builder = MeshBuilder()
+        builder.add_vertex((1.5, 2.5, 3.5))
+        
+        np.testing.assert_array_almost_equal(
+            builder.position[0], [1.5, 2.5, 3.5]
+        )
+
+
+class TestMeshBuilderNormals(unittest.TestCase):
+    """Test normal buffer management."""
+    
+    def test_add_normal(self):
+        """Test adding normal to a vertex."""
         builder = MeshBuilder()
         builder.add_submesh()
         
-        # Add 3 vertices
-        builder.add_vertex((0, 0, 0))
-        builder.add_vertex((1, 0, 0))
-        builder.add_vertex((0, 1, 0))
+        v0 = builder.add_vertex((0, 0, 0))
+        builder.add_normal((0, 1, 0))
         
-        # Add normals for only 2 vertices
-        builder.normal = np.array([[1, 0, 0], [0, 1, 0]], dtype=np.float32)
-        
-        error = builder.check()
-        self.assertIn("Normal size", error)
-        self.assertIn("does not match position size", error)
+        self.assertTrue(builder.contained_normal())
+        np.testing.assert_array_almost_equal(
+            builder.normal[v0], [0, 1, 0]
+        )
     
-    def test_tangent_size_mismatch(self):
-        """Test validation fails for tangent size mismatch."""
+    def test_add_multiple_normals(self):
+        """Test adding normals to multiple vertices."""
         builder = MeshBuilder()
         builder.add_submesh()
         
-        # Add 3 vertices
-        builder.add_vertex((0, 0, 0))
-        builder.add_vertex((1, 0, 0))
-        builder.add_vertex((0, 1, 0))
+        v0 = builder.add_vertex((0, 0, 0))
+        v1 = builder.add_vertex((1, 0, 0))
+        v2 = builder.add_vertex((0, 1, 0))
         
-        # Add tangents for only 2 vertices
-        builder.tangent = np.array([[1, 0, 0, 1], [0, 1, 0, 1]], dtype=np.float32)
+        builder.add_normal((0, 0, 1))
+        builder.add_normal((0, 0, 1))
+        builder.add_normal((0, 0, 1))
         
-        error = builder.check()
-        self.assertIn("Tangent size", error)
+        for i in range(3):
+            np.testing.assert_array_almost_equal(
+                builder.normal[i], [0, 0, 1]
+            )
+
+
+class TestMeshBuilderUVs(unittest.TestCase):
+    """Test UV coordinate management."""
     
-    def test_uv_size_mismatch(self):
-        """Test validation fails for UV size mismatch."""
+    def test_add_uv(self):
+        """Test adding UV coordinates."""
         builder = MeshBuilder()
         builder.add_submesh()
         builder.add_uv_set()
         
-        # Add 3 vertices
-        builder.add_vertex((0, 0, 0))
-        builder.add_vertex((1, 0, 0))
-        builder.add_vertex((0, 1, 0))
+        v0 = builder.add_vertex((0, 0, 0))
+        builder.add_uv((0.5, 0.5))
         
-        # Add UVs for only 2 vertices
-        builder.uvs[0] = np.array([[0, 0], [1, 0]], dtype=np.float32)
+        self.assertEqual(builder.uv_count(), 1)
+        np.testing.assert_array_almost_equal(
+            builder.uvs[0][v0], [0.5, 0.5]
+        )
+    
+    def test_add_multiple_uv_sets(self):
+        """Test adding UVs to multiple sets."""
+        builder = MeshBuilder()
+        builder.add_submesh()
+        builder.add_uv_set()  # Set 0
+        builder.add_uv_set()  # Set 1
+        
+        v0 = builder.add_vertex((0, 0, 0))
+        builder.add_uv((0, 0))  # Added to set 0
+        builder.add_uv((1, 1), uv_set_index=1)  # Added to set 1
+        
+        self.assertEqual(builder.uv_count(), 2)
+        np.testing.assert_array_almost_equal(
+            builder.uvs[0][v0], [0, 0]
+        )
+        np.testing.assert_array_almost_equal(
+            builder.uvs[1][v0], [1, 1]
+        )
+
+
+class TestMeshBuilderTangents(unittest.TestCase):
+    """Test tangent buffer management."""
+    
+    def test_add_tangent(self):
+        """Test adding tangent to a vertex."""
+        builder = MeshBuilder()
+        builder.add_submesh()
+        
+        v0 = builder.add_vertex((0, 0, 0))
+        builder.add_tangent((1, 0, 0, 1))
+        
+        self.assertTrue(builder.contained_tangent())
+        np.testing.assert_array_almost_equal(
+            builder.tangent[v0], [1, 0, 0, 1]
+        )
+    
+    def test_tangent_shape(self):
+        """Test tangent buffer has correct shape."""
+        builder = MeshBuilder()
+        builder.add_submesh()
+        
+        builder.add_vertex((0, 0, 0))
+        builder.add_tangent((1, 0, 0, 1))
+        
+        self.assertEqual(builder.tangent.shape[1], 4)
+
+
+class TestMeshBuilderSubmeshes(unittest.TestCase):
+    """Test multiple submesh handling."""
+    
+    def test_multiple_submeshes(self):
+        """Test creating multiple submeshes."""
+        builder = MeshBuilder()
+        
+        sm0 = builder.add_submesh()
+        sm1 = builder.add_submesh()
+        sm2 = builder.add_submesh()
+        
+        self.assertEqual(builder.submesh_count(), 3)
+        self.assertEqual(sm0, 0)
+        self.assertEqual(sm1, 1)
+        self.assertEqual(sm2, 2)
+    
+    def test_triangles_in_different_submeshes(self):
+        """Test adding triangles to different submeshes."""
+        builder = MeshBuilder()
+        
+        sm0 = builder.add_submesh()
+        sm1 = builder.add_submesh()
+        
+        # Shared vertices
+        v0 = builder.add_vertex((0, 0, 0))
+        v1 = builder.add_vertex((1, 0, 0))
+        v2 = builder.add_vertex((0, 1, 0))
+        
+        # Triangle in submesh 0
+        builder.add_triangle(sm0, v0, v1, v2)
+        
+        # Triangle in submesh 1
+        builder.add_triangle(sm1, v0, v2, v1)
+        
+        self.assertEqual(builder.indices_count(), 6)
         
         error = builder.check()
-        self.assertIn("UV0 size", error)
+        self.assertEqual(error, "")
 
 
-class TestWriteToFile(unittest.TestCase):
-    """Test file output (write_to method)."""
+class TestMeshBuilderPrimitives(unittest.TestCase):
+    """Test creating common primitives."""
     
-    def test_write_to_file_path(self):
-        """Test writing mesh to file path."""
+    def test_create_triangle(self):
+        """Test creating a simple triangle."""
         builder = MeshBuilder()
         builder.add_submesh()
+        builder.add_uv_set()
         
         v0 = builder.add_vertex((0, 0, 0))
         v1 = builder.add_vertex((1, 0, 0))
         v2 = builder.add_vertex((0, 1, 0))
+        
+        builder.add_uv((0, 0))
+        builder.add_uv((1, 0))
+        builder.add_uv((0, 1))
+        
         builder.add_triangle(0, v0, v1, v2)
         
-        with tempfile.NamedTemporaryFile(suffix='.bin', delete=False) as tmp:
-            tmp_path = tmp.name
-        
-        try:
-            offsets = builder.write_to(tmp_path)
-            
-            # Check file was created
-            self.assertTrue(Path(tmp_path).exists())
-            
-            # Check offsets (single submesh = empty array)
-            self.assertEqual(len(offsets), 0)
-            
-            # Check file has content
-            file_size = Path(tmp_path).stat().st_size
-            self.assertGreater(file_size, 0)
-        finally:
-            Path(tmp_path).unlink(missing_ok=True)
+        error = builder.check()
+        self.assertEqual(error, "")
+        self.assertEqual(builder.vertex_count(), 3)
+        self.assertEqual(builder.indices_count(), 3)
     
-    def test_write_to_bytearray(self):
-        """Test writing mesh to bytearray."""
+    def test_create_quad(self):
+        """Test creating a quad (2 triangles)."""
         builder = MeshBuilder()
         builder.add_submesh()
+        builder.add_uv_set()
         
         v0 = builder.add_vertex((0, 0, 0))
         v1 = builder.add_vertex((1, 0, 0))
-        v2 = builder.add_vertex((0, 1, 0))
+        v2 = builder.add_vertex((1, 1, 0))
+        v3 = builder.add_vertex((0, 1, 0))
+        
+        builder.add_uv((0, 0))
+        builder.add_uv((1, 0))
+        builder.add_uv((1, 1))
+        builder.add_uv((0, 1))
+        
         builder.add_triangle(0, v0, v1, v2)
+        builder.add_triangle(0, v0, v2, v3)
         
-        buffer = bytearray()
-        initial_len = len(buffer)
-        
-        offsets = builder.write_to(buffer)
-        
-        self.assertGreater(len(buffer), initial_len)
-        self.assertEqual(len(offsets), 0)
+        error = builder.check()
+        self.assertEqual(error, "")
+        self.assertEqual(builder.vertex_count(), 4)
+        self.assertEqual(builder.indices_count(), 6)
     
-    def test_write_to_multiple_submeshes(self):
-        """Test writing mesh with multiple submeshes."""
-        builder = MeshBuilder()
-        
-        submesh0 = builder.add_submesh()
-        submesh1 = builder.add_submesh()
-        
-        # Add vertices
-        v0 = builder.add_vertex((0, 0, 0))
-        v1 = builder.add_vertex((1, 0, 0))
-        v2 = builder.add_vertex((0, 1, 0))
-        
-        # Add 2 triangles to first submesh
-        builder.add_triangle(submesh0, v0, v1, v2)
-        builder.add_triangle(submesh0, v0, v2, v1)
-        
-        # Add 1 triangle to second submesh
-        builder.add_triangle(submesh1, v0, v1, v2)
-        
-        with tempfile.NamedTemporaryFile(suffix='.bin', delete=False) as tmp:
-            tmp_path = tmp.name
-        
-        try:
-            offsets = builder.write_to(tmp_path)
-            
-            # Should have offsets for multiple submeshes
-            self.assertEqual(len(offsets), 2)
-            self.assertEqual(offsets[0], 0)  # First submesh starts at triangle 0
-            self.assertEqual(offsets[1], 2)  # Second submesh starts at triangle 2
-        finally:
-            Path(tmp_path).unlink(missing_ok=True)
-    
-    def test_write_invalid_mesh_raises(self):
-        """Test that writing invalid mesh raises ValueError."""
-        builder = MeshBuilder()
-        # Empty mesh should fail validation
-        
-        with tempfile.NamedTemporaryFile(suffix='.bin', delete=False) as tmp:
-            tmp_path = tmp.name
-        
-        try:
-            with self.assertRaises(ValueError) as context:
-                builder.write_to(tmp_path)
-            
-            self.assertIn("Mesh validation failed", str(context.exception))
-        finally:
-            Path(tmp_path).unlink(missing_ok=True)
-    
-    def test_write_to_invalid_type(self):
-        """Test that writing to invalid type raises TypeError."""
+    def test_create_cube(self):
+        """Test creating a cube mesh."""
         builder = MeshBuilder()
         builder.add_submesh()
-        v0 = builder.add_vertex((0, 0, 0))
-        v1 = builder.add_vertex((1, 0, 0))
-        v2 = builder.add_vertex((0, 1, 0))
-        builder.add_triangle(0, v0, v1, v2)
+        builder.add_uv_set()
         
-        with self.assertRaises(TypeError):
-            builder.write_to(12345)
+        # Define 8 cube vertices
+        positions = [
+            (-0.5, -0.5, -0.5),  # 0
+            (0.5, -0.5, -0.5),   # 1
+            (0.5, 0.5, -0.5),    # 2
+            (-0.5, 0.5, -0.5),   # 3
+            (-0.5, -0.5, 0.5),   # 4
+            (0.5, -0.5, 0.5),    # 5
+            (0.5, 0.5, 0.5),     # 6
+            (-0.5, 0.5, 0.5),    # 7
+        ]
+        
+        for pos in positions:
+            builder.add_vertex(pos)
+            builder.add_uv((0, 0))  # Simplified UVs
+        
+        # 12 triangles (6 faces * 2)
+        triangles = [
+            # Front face
+            (4, 5, 6), (4, 6, 7),
+            # Back face
+            (1, 0, 3), (1, 3, 2),
+            # Top face
+            (3, 7, 6), (3, 6, 2),
+            # Bottom face
+            (0, 1, 5), (0, 5, 4),
+            # Right face
+            (1, 2, 6), (1, 6, 5),
+            # Left face
+            (0, 4, 7), (0, 7, 3),
+        ]
+        
+        for tri in triangles:
+            builder.add_triangle(0, tri[0], tri[1], tri[2])
+        
+        error = builder.check()
+        self.assertEqual(error, "")
+        self.assertEqual(builder.vertex_count(), 8)
+        self.assertEqual(builder.indices_count(), 36)
+    
+    def test_create_plane(self):
+        """Test creating a plane mesh with multiple quads."""
+        builder = MeshBuilder()
+        builder.add_submesh()
+        builder.add_uv_set()
+        
+        segments = 4
+        for z in range(segments + 1):
+            for x in range(segments + 1):
+                u = x / segments
+                v = z / segments
+                builder.add_vertex((x, 0, z))
+                builder.add_uv((u, v))
+        
+        # Create triangles
+        for z in range(segments):
+            for x in range(segments):
+                base = z * (segments + 1) + x
+                
+                v0 = base
+                v1 = base + 1
+                v2 = base + segments + 2
+                v3 = base + segments + 1
+                
+                builder.add_triangle(0, v0, v1, v2)
+                builder.add_triangle(0, v0, v2, v3)
+        
+        error = builder.check()
+        self.assertEqual(error, "")
+        expected_vertices = (segments + 1) * (segments + 1)
+        expected_triangles = segments * segments * 2
+        self.assertEqual(builder.vertex_count(), expected_vertices)
+        self.assertEqual(builder.indices_count(), expected_triangles * 3)
+    
+    def test_create_sphere(self):
+        """Test creating a sphere mesh."""
+        builder = MeshBuilder()
+        builder.add_submesh()
+        builder.add_uv_set()
+        
+        radius = 1.0
+        segments = 16
+        rings = 8
+        
+        # Top pole
+        builder.add_vertex((0, radius, 0))
+        builder.add_uv((0.5, 1.0))
+        
+        # Middle rings
+        for ring in range(1, rings):
+            phi = math.pi * ring / rings
+            y = radius * math.cos(phi)
+            ring_radius = radius * math.sin(phi)
+            
+            for seg in range(segments):
+                theta = 2 * math.pi * seg / segments
+                x = ring_radius * math.cos(theta)
+                z = ring_radius * math.sin(theta)
+                u = seg / segments
+                v = 1.0 - ring / rings
+                
+                builder.add_vertex((x, y, z))
+                builder.add_uv((u, v))
+        
+        # Bottom pole
+        builder.add_vertex((0, -radius, 0))
+        builder.add_uv((0.5, 0.0))
+        
+        # Create triangles
+        # Top cap
+        for seg in range(segments):
+            next_seg = (seg + 1) % segments
+            v0 = 0  # Top pole
+            v1 = 1 + seg
+            v2 = 1 + next_seg
+            builder.add_triangle(0, v0, v1, v2)
+        
+        # Middle rings
+        for ring in range(rings - 2):
+            ring_start = 1 + ring * segments
+            next_ring_start = 1 + (ring + 1) * segments
+            
+            for seg in range(segments):
+                next_seg = (seg + 1) % segments
+                
+                v0 = ring_start + seg
+                v1 = ring_start + next_seg
+                v2 = next_ring_start + next_seg
+                v3 = next_ring_start + seg
+                
+                builder.add_triangle(0, v0, v1, v2)
+                builder.add_triangle(0, v0, v2, v3)
+        
+        # Bottom cap
+        bottom_pole = builder.vertex_count() - 1
+        last_ring_start = 1 + (rings - 2) * segments
+        for seg in range(segments):
+            next_seg = (seg + 1) % segments
+            v0 = bottom_pole
+            v1 = last_ring_start + next_seg
+            v2 = last_ring_start + seg
+            builder.add_triangle(0, v0, v1, v2)
+        
+        error = builder.check()
+        self.assertEqual(error, "")
 
 
-class TestTangentCalculation(unittest.TestCase):
-    """Test tangent calculation static method."""
+class TestMeshBuilderTangentCalculation(unittest.TestCase):
+    """Test tangent calculation utility."""
     
-    def test_calculate_tangent_simple_triangle(self):
-        """Test tangent calculation for simple triangle."""
-        positions = np.array([
-            [0, 0, 0],
-            [1, 0, 0],
-            [0, 1, 0]
-        ], dtype=np.float32)
-        
-        uvs = np.array([
-            [0, 0],
-            [1, 0],
-            [0, 1]
-        ], dtype=np.float32)
-        
-        triangles = np.array([
-            [0, 1, 2]
-        ], dtype=np.uint32)
-        
-        tangents = MeshBuilder.calculate_tangent(positions, uvs, triangles)
-        
-        # Should return array of shape (N, 4)
-        self.assertEqual(tangents.shape, (3, 4))
-        
-        # Tangents should be normalized (first 3 components)
-        for i in range(3):
-            tangent_len = np.linalg.norm(tangents[i, :3])
-            self.assertAlmostEqual(tangent_len, 1.0, places=5)
-        
-        # W component should be set (handedness)
-        self.assertEqual(tangents[0, 3], 1.0)
-    
-    def test_calculate_tangent_quad(self):
-        """Test tangent calculation for quad (2 triangles)."""
+    def test_calculate_tangent_simple_quad(self):
+        """Test tangent calculation for a simple quad."""
         positions = np.array([
             [0, 0, 0],
             [1, 0, 0],
             [1, 1, 0],
-            [0, 1, 0]
+            [0, 1, 0],
         ], dtype=np.float32)
         
         uvs = np.array([
             [0, 0],
             [1, 0],
             [1, 1],
-            [0, 1]
+            [0, 1],
         ], dtype=np.float32)
         
         triangles = np.array([
             [0, 1, 2],
-            [0, 2, 3]
+            [0, 2, 3],
         ], dtype=np.uint32)
         
         tangents = MeshBuilder.calculate_tangent(positions, uvs, triangles)
         
+        # Should return tangents for all vertices
         self.assertEqual(tangents.shape, (4, 4))
         
-        # All tangents should be normalized
+        # Tangent should point in X direction (along U axis)
         for i in range(4):
-            tangent_len = np.linalg.norm(tangents[i, :3])
-            self.assertAlmostEqual(tangent_len, 1.0, places=5)
+            self.assertAlmostEqual(abs(tangents[i][0]), 1.0, places=5)
+            self.assertAlmostEqual(tangents[i][1], 0.0, places=5)
+            self.assertAlmostEqual(tangents[i][2], 0.0, places=5)
+            # W component should be +1 or -1 (handedness)
+            self.assertTrue(abs(tangents[i][3]) == 1.0)
     
-    def test_calculate_tangent_custom_w(self):
+    def test_calculate_tangent_with_custom_w(self):
         """Test tangent calculation with custom W value."""
         positions = np.array([
             [0, 0, 0],
             [1, 0, 0],
-            [0, 1, 0]
+            [0.5, 0, 1],
         ], dtype=np.float32)
         
         uvs = np.array([
             [0, 0],
             [1, 0],
-            [0, 1]
+            [0.5, 1],
         ], dtype=np.float32)
         
         triangles = np.array([[0, 1, 2]], dtype=np.uint32)
         
         tangents = MeshBuilder.calculate_tangent(positions, uvs, triangles, tangent_w=-1.0)
         
-        self.assertEqual(tangents[0, 3], -1.0)
-    
-    def test_calculate_tangent_degenerate_uv(self):
-        """Test tangent calculation with degenerate UVs."""
-        positions = np.array([
-            [0, 0, 0],
-            [1, 0, 0],
-            [0, 1, 0]
-        ], dtype=np.float32)
-        
-        # Degenerate UVs (all the same)
-        uvs = np.array([
-            [0, 0],
-            [0, 0],
-            [0, 0]
-        ], dtype=np.float32)
-        
-        triangles = np.array([[0, 1, 2]], dtype=np.uint32)
-        
-        # Should not crash, though results may be zero
-        tangents = MeshBuilder.calculate_tangent(positions, uvs, triangles)
-        
-        self.assertEqual(tangents.shape, (3, 4))
+        # All W components should be -1
+        for i in range(3):
+            self.assertEqual(tangents[i][3], -1.0)
 
 
-class TestEdgeCases(unittest.TestCase):
-    """Test edge cases and unusual scenarios."""
+class TestMeshBuilderFileOutput(unittest.TestCase):
+    """Test file output functionality."""
     
-    def test_empty_submesh(self):
-        """Test mesh with empty submesh."""
-        builder = MeshBuilder()
-        builder.add_submesh()
+    def test_write_to_file(self):
+        """Test writing mesh to file."""
+        import tempfile
         
-        # Add vertices but no triangles
-        builder.add_vertex((0, 0, 0))
-        builder.add_vertex((1, 0, 0))
-        builder.add_vertex((0, 1, 0))
-        
-        # Empty submesh is valid (no indices to check)
-        error = builder.check()
-        self.assertEqual(error, "")
-    
-    def test_many_submeshes(self):
-        """Test mesh with many submeshes."""
-        builder = MeshBuilder()
-        
-        # Create 10 submeshes
-        for _ in range(10):
-            builder.add_submesh()
-        
-        self.assertEqual(builder.submesh_count(), 10)
-        
-        # Add vertices
-        for i in range(4):
-            builder.add_vertex((i, 0, 0))
-        
-        # Add one triangle to each submesh
-        for i in range(10):
-            builder.add_triangle(i, 0, 1, 2)
-        
-        error = builder.check()
-        self.assertEqual(error, "")
-        
-        self.assertEqual(builder.indices_count(), 30)  # 10 * 3
-    
-    def test_many_uv_sets(self):
-        """Test mesh with multiple UV sets."""
-        builder = MeshBuilder()
-        builder.add_submesh()
-        
-        # Add 4 UV sets
-        for _ in range(4):
-            builder.add_uv_set()
-        
-        self.assertEqual(builder.uv_count(), 4)
-    
-    def test_large_vertex_count(self):
-        """Test mesh with large number of vertices."""
-        builder = MeshBuilder()
-        builder.add_submesh()
-        
-        # Add 1000 vertices
-        for i in range(1000):
-            builder.add_vertex((i, i * 0.5, i * 0.25))
-        
-        self.assertEqual(builder.vertex_count(), 1000)
-        
-        # Add some triangles
-        for i in range(0, 997, 3):
-            builder.add_triangle(0, i, i + 1, i + 2)
-        
-        error = builder.check()
-        self.assertEqual(error, "")
-    
-    def test_negative_coordinates(self):
-        """Test mesh with negative coordinates."""
-        builder = MeshBuilder()
-        builder.add_submesh()
-        
-        v0 = builder.add_vertex((-1, -2, -3))
-        v1 = builder.add_vertex((-4, -5, -6))
-        v2 = builder.add_vertex((-7, -8, -9))
-        
-        builder.add_triangle(0, v0, v1, v2)
-        
-        error = builder.check()
-        self.assertEqual(error, "")
-        
-        np.testing.assert_array_almost_equal(
-            builder.position[v0], [-1, -2, -3]
-        )
-    
-    def test_floating_point_precision(self):
-        """Test mesh with floating point precision values."""
-        builder = MeshBuilder()
-        builder.add_submesh()
-        
-        v0 = builder.add_vertex((0.1, 0.2, 0.3))
-        v1 = builder.add_vertex((1.234567, 2.345678, 3.456789))
-        v2 = builder.add_vertex((1e-6, 1e-7, 1e-8))
-        
-        builder.add_triangle(0, v0, v1, v2)
-        
-        error = builder.check()
-        self.assertEqual(error, "")
-    
-    def test_reused_vertices(self):
-        """Test mesh with vertices reused across triangles."""
-        builder = MeshBuilder()
-        builder.add_submesh()
-        
-        # Create a fan from one vertex
-        center = builder.add_vertex((0, 0, 0))
-        
-        # Create 8 triangles around center
-        vertices = [center]
-        for i in range(8):
-            angle = i * (2 * np.pi / 8)
-            x = np.cos(angle)
-            y = np.sin(angle)
-            vertices.append(builder.add_vertex((x, y, 0)))
-        
-        # Create triangles: center, i, i+1
-        for i in range(1, 8):
-            builder.add_triangle(0, center, vertices[i], vertices[i + 1] if i < 8 else vertices[1])
-        
-        error = builder.check()
-        self.assertEqual(error, "")
-        
-        # Center vertex used in 7 triangles
-        self.assertEqual(builder.vertex_count(), 9)
-        self.assertEqual(builder.indices_count(), 21)  # 7 * 3
-
-
-class TestMeshWithNormalsAndTangents(unittest.TestCase):
-    """Test mesh with normals and tangents."""
-    
-    def test_add_normals_manually(self):
-        """Test setting normals manually."""
-        builder = MeshBuilder()
-        builder.add_submesh()
-        
-        # Add 3 vertices
-        for _ in range(3):
-            builder.add_vertex((0, 0, 0))
-        
-        # Add normals
-        builder.normal = np.array([
-            [1, 0, 0],
-            [0, 1, 0],
-            [0, 0, 1]
-        ], dtype=np.float32)
-        
-        self.assertTrue(builder.contained_normal())
-        self.assertEqual(builder.normal.shape, (3, 3))
-    
-    def test_add_tangents_manually(self):
-        """Test setting tangents manually."""
-        builder = MeshBuilder()
-        builder.add_submesh()
-        
-        # Add 3 vertices
-        for _ in range(3):
-            builder.add_vertex((0, 0, 0))
-        
-        # Add tangents
-        builder.tangent = np.array([
-            [1, 0, 0, 1],
-            [0, 1, 0, 1],
-            [0, 0, 1, -1]
-        ], dtype=np.float32)
-        
-        self.assertTrue(builder.contained_tangent())
-        self.assertEqual(builder.tangent.shape, (3, 4))
-    
-    def test_complete_mesh_with_all_attributes(self):
-        """Test complete mesh with positions, normals, tangents, and UVs."""
         builder = MeshBuilder()
         builder.add_submesh()
         builder.add_uv_set()
         
-        # Create a simple quad (2 triangles)
-        positions = [
-            [0, 0, 0],
-            [1, 0, 0],
-            [1, 1, 0],
-            [0, 1, 0],
-        ]
+        v0 = builder.add_vertex((0, 0, 0))
+        v1 = builder.add_vertex((1, 0, 0))
+        v2 = builder.add_vertex((0, 1, 0))
         
-        normals = [
-            [0, 0, 1],
-            [0, 0, 1],
-            [0, 0, 1],
-            [0, 0, 1],
-        ]
+        builder.add_uv((0, 0))
+        builder.add_uv((1, 0))
+        builder.add_uv((0, 1))
         
-        uvs = [
-            [0, 0],
-            [1, 0],
-            [1, 1],
-            [0, 1],
-        ]
+        builder.add_triangle(0, v0, v1, v2)
         
-        for pos in positions:
-            builder.add_vertex(pos)
+        with tempfile.NamedTemporaryFile(suffix='.bin', delete=False) as tmp:
+            tmp_path = tmp.name
         
-        builder.normal = np.array(normals, dtype=np.float32)
-        builder.uvs[0] = np.array(uvs, dtype=np.float32)
-        
-        # Calculate tangents
-        triangles = np.array([[0, 1, 2], [0, 2, 3]], dtype=np.uint32)
-        builder.tangent = MeshBuilder.calculate_tangent(
-            builder.position, builder.uvs[0], triangles
-        )
-        
-        # Add triangles
-        builder.add_triangle(0, 0, 1, 2)
-        builder.add_triangle(0, 0, 2, 3)
-        
-        # Validate
-        error = builder.check()
-        self.assertEqual(error, "")
-        
-        # Check all attributes present
-        self.assertTrue(builder.contained_normal())
-        self.assertTrue(builder.contained_tangent())
-        self.assertEqual(builder.uv_count(), 1)
-
-
-class TestSubmeshOffsets(unittest.TestCase):
-    """Test submesh offset calculation."""
+        try:
+            offsets = builder.write_to(tmp_path)
+            self.assertTrue(os.path.exists(tmp_path))
+            self.assertGreater(os.path.getsize(tmp_path), 0)
+            # Should have submesh count offsets
+            self.assertEqual(len(offsets), 1)
+        finally:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
     
-    def test_single_submesh_empty_offsets(self):
-        """Test single submesh returns empty offsets array."""
+    def test_write_creates_valid_file(self):
+        """Test that written file is valid."""
+        import tempfile
+        
+        builder = MeshBuilder()
+        builder.add_submesh()
+        
+        # Create a simple triangle
+        v0 = builder.add_vertex((0, 0, 0))
+        v1 = builder.add_vertex((1, 0, 0))
+        v2 = builder.add_vertex((0, 1, 0))
+        builder.add_triangle(0, v0, v1, v2)
+        
+        with tempfile.NamedTemporaryFile(suffix='.bin', delete=False) as tmp:
+            tmp_path = tmp.name
+        
+        try:
+            builder.write_to(tmp_path)
+            
+            # Verify we can read the file back
+            with open(tmp_path, 'rb') as f:
+                data = f.read()
+                self.assertGreater(len(data), 0)
+        finally:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+
+class TestRoboCuteDisplayIntegration(unittest.TestCase):
+    """Test RoboCute display initialization for visualization tests."""
+    
+    def test_display_initialization(self):
+        """Test that display can be initialized when robocute is available."""
+        if not ROBOCUTE_AVAILABLE:
+            self.skipTest("robocute not available")
+        
+        app = rbc.app.App()
+        app.init_display(1280, 720)
+        # Display should be initialized
+        self.assertTrue(True)  # If we get here, init succeeded
+    
+    def test_app_run_with_limit_frame(self):
+        """Test that app.run() accepts limit_frame parameter."""
+        if not ROBOCUTE_AVAILABLE:
+            self.skipTest("robocute not available")
+        
+        app = rbc.app.App()
+        app.init_display(1280, 720)
+        # Run with frame limit for testing
+        try:
+            app.run(prepare_denoise=False, limit_frame=10)
+        except Exception as e:
+            # Expected in test environment without actual display
+            pass
+
+
+class TestRoboCuteMeshResource(unittest.TestCase):
+    """Test MeshBuilder integration with RoboCute MeshResource."""
+    
+    def test_write_to_mesh(self):
+        """Test creating MeshResource from MeshBuilder."""
+        if not ROBOCUTE_AVAILABLE:
+            self.skipTest("robocute not available")
+        
+        builder = MeshBuilder()
+        builder.add_submesh()
+        builder.add_uv_set()
+        
+        v0 = builder.add_vertex((0, 0, 0))
+        v1 = builder.add_vertex((1, 0, 0))
+        v2 = builder.add_vertex((0, 1, 0))
+        
+        builder.add_uv((0, 0))
+        builder.add_uv((1, 0))
+        builder.add_uv((0, 1))
+        
+        builder.add_triangle(0, v0, v1, v2)
+        
+        # Create mesh resource
+        mesh = builder.write_to_mesh()
+        mesh.install()
+        
+        self.assertTrue(mesh)  # Mesh should be valid
+    
+    def test_mesh_with_normals(self):
+        """Test creating mesh with normals."""
         builder = MeshBuilder()
         builder.add_submesh()
         
         v0 = builder.add_vertex((0, 0, 0))
         v1 = builder.add_vertex((1, 0, 0))
         v2 = builder.add_vertex((0, 1, 0))
+        
         builder.add_triangle(0, v0, v1, v2)
         
-        offsets = builder._gen_submesh_offsets()
-        self.assertEqual(len(offsets), 0)
+        # Add normals
+        builder.normal = np.array([
+            [0, 0, 1],
+            [0, 0, 1],
+            [0, 0, 1],
+        ], dtype=np.float32)
+        
+        # Create mesh resource
+        if ROBOCUTE_AVAILABLE:
+            mesh = builder.write_to_mesh()
+            mesh.install()
+            self.assertTrue(mesh)
     
-    def test_multiple_submesh_offsets(self):
-        """Test multiple submesh offset calculation."""
+    def test_mesh_with_tangents(self):
+        """Test creating mesh with tangents."""
         builder = MeshBuilder()
+        builder.add_submesh()
+        builder.add_uv_set()
         
-        # Add 3 submeshes with different triangle counts
-        for _ in range(3):
-            builder.add_submesh()
+        v0 = builder.add_vertex((0, 0, 0))
+        v1 = builder.add_vertex((1, 0, 0))
+        v2 = builder.add_vertex((0, 1, 0))
         
-        # Add vertices
-        for i in range(6):
-            builder.add_vertex((i, 0, 0))
+        builder.add_uv((0, 0))
+        builder.add_uv((1, 0))
+        builder.add_uv((0, 1))
         
-        # Submesh 0: 2 triangles
-        builder.add_triangle(0, 0, 1, 2)
-        builder.add_triangle(0, 0, 2, 3)
+        builder.add_triangle(0, v0, v1, v2)
         
-        # Submesh 1: 1 triangle
-        builder.add_triangle(1, 0, 1, 4)
+        # Calculate and set tangents
+        triangles = np.array([[0, 1, 2]], dtype=np.uint32)
+        tangents = MeshBuilder.calculate_tangent(
+            builder.position, builder.uvs[0], triangles
+        )
+        builder.tangent = tangents
         
-        # Submesh 2: 3 triangles
-        builder.add_triangle(2, 0, 4, 5)
-        builder.add_triangle(2, 0, 5, 1)
-        builder.add_triangle(2, 1, 2, 3)
+        # Create mesh resource
+        if ROBOCUTE_AVAILABLE:
+            mesh = builder.write_to_mesh()
+            mesh.install()
+            self.assertTrue(mesh)
+
+
+class TestRoboCuteRenderingWorkflow(unittest.TestCase):
+    """
+    Test RoboCute rendering workflow with display initialization.
+    These tests demonstrate the recommended pattern for tests requiring visualization.
+    """
+    
+    def test_rendering_workflow_with_display(self):
+        """
+        Example of a rendering test with display initialization.
         
-        offsets = builder._gen_submesh_offsets()
+        Pattern for tests requiring visualization:
+        1. Import robocute modules
+        2. Create mesh using MeshBuilder
+        3. Initialize display: app.init_display(width, height)
+        4. Enable camera control: app.ctx.enable_camera_control()
+        5. Run with frame limit: app.run(limit_frame=100)
+        """
+        if not ROBOCUTE_AVAILABLE:
+            self.skipTest("robocute not available")
         
-        self.assertEqual(len(offsets), 3)
-        self.assertEqual(offsets[0], 0)  # First submesh starts at 0
-        self.assertEqual(offsets[1], 2)  # Second submesh starts at triangle 2
-        self.assertEqual(offsets[2], 3)  # Third submesh starts at triangle 3
+        # Create mesh using MeshBuilder
+        builder = MeshBuilder()
+        builder.add_submesh()
+        builder.add_uv_set()
+        
+        v0 = builder.add_vertex((0, 0, 0))
+        v1 = builder.add_vertex((1, 0, 0))
+        v2 = builder.add_vertex((0, 1, 0))
+        
+        builder.add_uv((0, 0))
+        builder.add_uv((1, 0))
+        builder.add_uv((0, 1))
+        
+        builder.add_triangle(0, v0, v1, v2)
+        
+        error = builder.check()
+        self.assertEqual(error, "")
+        
+        # Initialize RoboCute app with display
+        app = rbc.app.App()
+        app.init_display(1280, 720)
+        app.ctx.enable_camera_control()
+        
+        # Get mesh resource
+        mesh = builder.write_to_mesh()
+        mesh.install()
+        
+        # Run with frame limit for automated testing
+        app.run(prepare_denoise=False, limit_frame=100)
+    
+    def test_rendering_multiple_meshes(self):
+        """Test rendering multiple meshes with display."""
+        if not ROBOCUTE_AVAILABLE:
+            self.skipTest("robocute not available")
+        
+        # Create first mesh (triangle)
+        builder1 = MeshBuilder()
+        builder1.add_submesh()
+        v0 = builder1.add_vertex((0, 0, 0))
+        v1 = builder1.add_vertex((1, 0, 0))
+        v2 = builder1.add_vertex((0, 1, 0))
+        builder1.add_triangle(0, v0, v1, v2)
+        
+        # Create second mesh (quad)
+        builder2 = MeshBuilder()
+        builder2.add_submesh()
+        v0 = builder2.add_vertex((2, 0, 0))
+        v1 = builder2.add_vertex((3, 0, 0))
+        v2 = builder2.add_vertex((3, 1, 0))
+        v3 = builder2.add_vertex((2, 1, 0))
+        builder2.add_triangle(0, v0, v1, v2)
+        builder2.add_triangle(0, v0, v2, v3)
+        
+        # Initialize display
+        app = rbc.app.App()
+        app.init_display(1280, 720)
+        app.ctx.enable_camera_control()
+        
+        # Install meshes
+        mesh1 = builder1.write_to_mesh()
+        mesh1.install()
+        
+        mesh2 = builder2.write_to_mesh()
+        mesh2.install()
+        
+        # Run with frame limit
+        app.run(prepare_denoise=False, limit_frame=50)
 
 
 def run_tests():

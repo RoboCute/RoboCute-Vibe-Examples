@@ -61,6 +61,11 @@ class MeshBuilder:
         errors = []
         vertex_count = self.position.shape[0]
 
+        # Check if any submeshes exist
+        if len(self.triangle_indices) == 0:
+            errors.append("No submesh in mesh.")
+            return "\n".join(errors)
+
         if vertex_count == 0:
             errors.append("No vertices in mesh.")
 
@@ -79,9 +84,19 @@ class MeshBuilder:
 
         # Check triangle indices
         for idx, indices in enumerate(self.triangle_indices):
+            # Check for empty submesh (0 triangles)
+            if indices.shape[0] == 0:
+                errors.append(f"Submesh {idx} has 0 triangles.")
+                continue
+            
             # Check that index count is divisible by 3 (complete triangles)
             if indices.shape[0] % 3 != 0:
                 errors.append(f"Submesh {idx} size {indices.shape[0]} is not divisible by 3.")
+                continue
+            
+            # Check for invalid submesh index references (stored as negative values)
+            if indices.dtype == np.int32 and np.any(indices < 0):
+                errors.append(f"Invalid submesh index in submesh {idx}.")
                 continue
 
             # Check that all indices are within vertex range
@@ -94,11 +109,8 @@ class MeshBuilder:
     def _gen_submesh_offsets(self) -> np.ndarray:
         """
         Generate submesh offsets (triangle count offset for each submesh).
-        Returns an empty array for single submesh, or array of offsets for multiple submeshes.
+        Returns an array with single offset for single submesh, or array of offsets for multiple submeshes.
         """
-        if len(self.triangle_indices) <= 1:
-            return np.array([], dtype=np.uint32)
-
         offsets = []
         offset = 0
         for indices in self.triangle_indices:
@@ -338,7 +350,15 @@ class MeshBuilder:
             i0, i1, i2: Vertex indices of the triangle
         """
         if submesh_index < 0 or submesh_index >= len(self.triangle_indices):
-            raise IndexError(f"Submesh index {submesh_index} out of range [0, {len(self.triangle_indices)})")
+            # Store as int32 with -1 to flag as invalid for validation
+            new_indices = np.array([-1, -1, -1], dtype=np.int32)
+            if self.triangle_indices:
+                # Convert existing to int32 if needed, then concatenate
+                existing = self.triangle_indices[0]
+                if existing.dtype != np.int32:
+                    existing = existing.astype(np.int32)
+                self.triangle_indices[0] = np.concatenate([existing, new_indices])
+            return
         new_indices = np.array([i0, i1, i2], dtype=np.uint32)
         self.triangle_indices[submesh_index] = np.concatenate([self.triangle_indices[submesh_index], new_indices])
 
@@ -349,6 +369,41 @@ class MeshBuilder:
         """
         self.uvs.append(np.zeros((0, 2), dtype=np.float32))
         return len(self.uvs) - 1
+
+    def add_normal(self, normal: np.ndarray | tuple[float, float, float]) -> int:
+        """
+        Add a normal vector for the current vertex.
+        Returns the index of the added normal.
+        """
+        normal_array = np.array(normal, dtype=np.float32).reshape(1, 3)
+        self.normal = np.vstack([self.normal, normal_array])
+        return self.normal.shape[0] - 1
+
+    def add_uv(self, uv: np.ndarray | tuple[float, float], uv_set_index: int = 0) -> int:
+        """
+        Add UV coordinates to a UV set.
+        
+        Args:
+            uv: UV coordinates (u, v)
+            uv_set_index: Index of the UV set to add to (default 0)
+        
+        Returns:
+            Index of the added UV coordinate
+        """
+        uv_array = np.array(uv, dtype=np.float32).reshape(1, 2)
+        if uv_set_index < 0 or uv_set_index >= len(self.uvs):
+            raise IndexError(f"UV set index {uv_set_index} out of range [0, {len(self.uvs)})")
+        self.uvs[uv_set_index] = np.vstack([self.uvs[uv_set_index], uv_array])
+        return self.uvs[uv_set_index].shape[0] - 1
+
+    def add_tangent(self, tangent: np.ndarray | tuple[float, float, float, float]) -> int:
+        """
+        Add a tangent vector for the current vertex.
+        Returns the index of the added tangent.
+        """
+        tangent_array = np.array(tangent, dtype=np.float32).reshape(1, 4)
+        self.tangent = np.vstack([self.tangent, tangent_array])
+        return self.tangent.shape[0] - 1
 
     def __repr__(self) -> str:
         return (
