@@ -12,6 +12,7 @@ dependencies = [
   "matplotlib>=3.10.0",
   "pymeshlab>=2022.2",
   "trimesh>=3.20.0",
+  "opencv-python>=4.13.0.92",
 ]
 description = "Make Robotics Cute!"
 license = {file = "Licenses/Apache-2.0.txt"}

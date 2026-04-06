@@ -24,10 +24,10 @@ python build.py <work_dir> [options]
 
 ```bash
 # Build the project
-python build.py D:/RoboCute
+python build.py <RoboCute path>
 
 # Force rebuild
-python build.py D:/RoboCute -r
+python build.py <RoboCute path> -r
 ```
 
 **What the build script does:**
